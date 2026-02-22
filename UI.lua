@@ -45,9 +45,11 @@ end
 -- BAR CREATION
 -----------------------------------------------------------------------
 local function CreateCooldownBar(characterName, parent)
-    local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "EMACooldownsBar_"..Ambiguate(characterName, "none"), parent, "BackdropTemplate")
     f.characterName = characterName
     f:SetFrameLevel(parent:GetFrameLevel() + 1)
+    f.extraWidth = 0 
+    f.leftExtraWidth = 0
 
     f.nameLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.nameLabel:SetText(Ambiguate(characterName, "short"))
@@ -100,14 +102,14 @@ local function CreateCooldownBar(characterName, parent)
             local b = self.icons[i]
             b:SetSize(size, size)
             b:ClearAllPoints()
-            b:SetPoint("BOTTOMLEFT", (i-1)*(size + margin) + 4, 4)
+            b:SetPoint("BOTTOMLEFT", (i-1)*(size + margin) + 4 + (self.leftExtraWidth or 0), 4)
             b.icon:SetTexture(spellInfo.icon or 134400)
             
             local activeData = EMA_Cooldowns.activeCooldowns[charKey] and EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name]
             if activeData then
                 local remaining = activeData.startTime + activeData.duration - GetTime()
                 if remaining > 0 then
-                    b.icon:SetAlpha(1.0)
+                    b:SetAlpha(db.runningAlpha or 0.3)
                     b.cooldown:SetCooldown(activeData.startTime, activeData.duration)
                     b.cooldown:Show()
                     if db.showTimers then
@@ -121,19 +123,20 @@ local function CreateCooldownBar(characterName, parent)
                     end
                 else
                     EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name] = nil
-                    b.icon:SetAlpha(0.4)
+                    b:SetAlpha(db.readyAlpha or 1.0)
                     b.cooldown:Hide()
                     b.timerText:Hide()
                 end
             else
-                b.icon:SetAlpha(0.4)
+                b:SetAlpha(db.readyAlpha or 1.0)
                 b.cooldown:Hide()
                 b.timerText:Hide()
             end
             b:Show()
         end
 
-        local totalWidth = math.max(100, (size * activeCount) + (margin * math.max(0, activeCount - 1)) + 8)
+        local totalWidth = (size * activeCount) + (margin * math.max(0, activeCount - 1)) + 8 + (self.extraWidth or 0) + (self.leftExtraWidth or 0)
+        if activeCount == 0 and (self.extraWidth or 0) == 0 and (self.leftExtraWidth or 0) == 0 then totalWidth = 100 end
         self:SetSize(totalWidth, size + nameHeight + 8)
 
         self.nameLabel:ClearAllPoints()
@@ -269,6 +272,8 @@ function UI:RefreshBars()
         self.masterFrame:SetHeight(40)
         self.masterFrame:SetWidth(200)
     end
+    
+    EMA_Cooldowns.teamBars = self.teamBars
 end
 
 function UI:UpdateUI()

@@ -55,12 +55,15 @@ EMA_Cooldowns.settings = {
         lockBars = false,
         barOrder = "RoleAsc",
         showNames = true,
-        -- Whole UI Frame Styles
+        -- Opacity
+        runningAlpha = 0.3,
+        readyAlpha = 1.0,
+        -- Frame Styles
         frameBorderStyle = "Blizzard Tooltip",
         frameBackgroundStyle = "Blizzard Dialog Background",
         frameBackgroundColourR = 0.1, frameBackgroundColourG = 0.1, frameBackgroundColourB = 0.1, frameBackgroundColourA = 0.7,
         frameBorderColourR = 0.5, frameBorderColourG = 0.5, frameBorderColourB = 0.5, frameBorderColourA = 1.0,
-        -- Individual Bar Styles
+        -- Bar Styles
         barBorderStyle = "Blizzard Tooltip",
         barBackgroundStyle = "Blizzard Dialog Background",
         barBackgroundColourR = 0.1, barBackgroundColourG = 0.1, barBackgroundColourB = 0.1, barBackgroundColourA = 0.7,
@@ -73,9 +76,7 @@ EMA_Cooldowns.settings = {
         barMargin = 4,
         showTimers = true,
         timerFontSize = 14,
-        timerColorR = 1.0,
-        timerColorG = 1.0,
-        timerColorB = 1.0,
+        timerColorR = 1.0, timerColorG = 1.0, timerColorB = 1.0,
         enabledMembers = {},
         trackedSpells = {
             ["WARRIOR"] = {}, ["PALADIN"] = {}, ["HUNTER"] = {}, ["ROGUE"] = {},
@@ -200,52 +201,18 @@ function EMA_Cooldowns:PushSettingsToTeam() self:EMASendSettings() end
 -- REQUIRED BY EMA CORE FOR SYNC
 function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
     if characterName ~= self.characterName then
-        self.db.showBars = settings.showBars
-        self.db.barScale = settings.barScale
-        self.db.barAlpha = settings.barAlpha
-        self.db.lockBars = settings.lockBars
-        self.db.barOrder = settings.barOrder
-        self.db.showNames = settings.showNames
-        self.db.frameBorderStyle = settings.frameBorderStyle
-        self.db.frameBackgroundStyle = settings.frameBackgroundStyle
-        self.db.frameBackgroundColourR = settings.frameBackgroundColourR
-        self.db.frameBackgroundColourG = settings.frameBackgroundColourG
-        self.db.frameBackgroundColourB = settings.frameBackgroundColourB
-        self.db.frameBackgroundColourA = settings.frameBackgroundColourA
-        self.db.frameBorderColourR = settings.frameBorderColourR
-        self.db.frameBorderColourG = settings.frameBorderColourG
-        self.db.frameBorderColourB = settings.frameBorderColourB
-        self.db.frameBorderColourA = settings.frameBorderColourA
-        self.db.barBorderStyle = settings.barBorderStyle
-        self.db.barBackgroundStyle = settings.barBackgroundStyle
-        self.db.barBackgroundColourR = settings.barBackgroundColourR
-        self.db.barBackgroundColourG = settings.barBackgroundColourG
-        self.db.barBackgroundColourB = settings.barBackgroundColourB
-        self.db.barBackgroundColourA = settings.barBackgroundColourA
-        self.db.barBorderColourR = settings.barBorderColourR
-        self.db.barBorderColourG = settings.barBorderColourG
-        self.db.barBorderColourB = settings.barBorderColourB
-        self.db.barBorderColourA = settings.barBorderColourA
-        self.db.fontStyle = settings.fontStyle
-        self.db.fontSize = settings.fontSize
-        self.db.iconSize = settings.iconSize
-        self.db.iconMargin = settings.iconMargin
-        self.db.barMargin = settings.barMargin
-        self.db.showTimers = settings.showTimers
-        self.db.timerFontSize = settings.timerFontSize
-        self.db.timerColorR = settings.timerColorR
-        self.db.timerColorG = settings.timerColorG
-        self.db.timerColorB = settings.timerColorB
-        self.db.enabledMembers = EMAUtilities:CopyTable(settings.enabledMembers)
-        self.db.trackedSpells = EMAUtilities:CopyTable(settings.trackedSpells)
-        self.db.teamBarsPos = EMAUtilities:CopyTable(settings.teamBarsPos)
+        EMAUtilities:CopyTable(self.db, settings)
         self:SettingsRefresh()
         ns.UI:RefreshBars()
     end
 end
 
 function EMA_Cooldowns:BeforeEMAProfileChanged() end
-function EMA_Cooldowns:OnEMAProfileChanged() if self.completeDatabase then self.db = self.completeDatabase.profile end; self:SettingsRefresh(); ns.UI:RefreshBars() end
+function EMA_Cooldowns:OnEMAProfileChanged()
+    if self.completeDatabase then self.db = self.completeDatabase.profile end
+    self:SettingsRefresh()
+    ns.UI:RefreshBars()
+end
 
 function EMA_Cooldowns:SettingsCreate()
     self.settingsControl = {}
@@ -282,6 +249,17 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - dropdownHeight - verticalSpacing
     self.settingsControl.buttonRefreshTeam = EMAHelperSettings:CreateButton(self.settingsControl, headingWidth, left, movingTop, "Refresh Team Members", function() ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
+
+    EMAHelperSettings:CreateHeading(self.settingsControl, "Opacity Settings", movingTop, false)
+    movingTop = movingTop - headingHeight
+    self.settingsControl.sliderRunningAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "On cooldown")
+    self.settingsControl.sliderRunningAlpha:SetSliderValues(0.1, 1.0, 0.01)
+    self.settingsControl.sliderRunningAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.runningAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - sliderHeight
+    self.settingsControl.sliderReadyAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "Ready")
+    self.settingsControl.sliderReadyAlpha:SetSliderValues(0.1, 1.0, 0.01)
+    self.settingsControl.sliderReadyAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.readyAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - sliderHeight
 
     EMAHelperSettings:CreateHeading(self.settingsControl, "Appearance: Whole UI Frame", movingTop, false)
     movingTop = movingTop - headingHeight
@@ -505,6 +483,9 @@ function EMA_Cooldowns:SettingsRefresh()
         self.settingsControl.sliderAlpha:SetValue(db.barAlpha or 1.0)
         
         self.settingsControl.dropdownOrder:SetValue(db.barOrder or "RoleAsc")
+        
+        self.settingsControl.sliderRunningAlpha:SetValue(db.runningAlpha or 0.3)
+        self.settingsControl.sliderReadyAlpha:SetValue(db.readyAlpha or 1.0)
         
         -- Frame Styles
         self.settingsControl.dropdownFrameBorder:SetValue(db.frameBorderStyle or "Blizzard Tooltip")

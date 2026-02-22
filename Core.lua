@@ -295,7 +295,9 @@ function EMA_Cooldowns:PushSettingsToTeam() self:EMASendSettings() end
 -- REQUIRED BY EMA CORE FOR SYNC
 function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
     if characterName ~= self.characterName then
-        EMAUtilities:CopyTable(self.db, settings)
+        for k, v in pairs(settings) do
+            self.db[k] = v
+        end
         self:SettingsRefresh()
         ns.UI:RefreshBars()
     end

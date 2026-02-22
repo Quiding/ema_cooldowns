@@ -6,11 +6,11 @@ ns.UI = UI
 local SharedMedia = LibStub("LibSharedMedia-3.0")
 
 -- UI Utils
-local function ApplySkin(f)
+local function ApplySkin(f, prefix)
     if not EMA_Cooldowns.db or not f then return end
     local db = EMA_Cooldowns.db
-    local backgroundFile = SharedMedia:Fetch("background", db.backgroundStyle)
-    local borderFile = SharedMedia:Fetch("border", db.borderStyle)
+    local backgroundFile = SharedMedia:Fetch("background", db[prefix.."BackgroundStyle"])
+    local borderFile = SharedMedia:Fetch("border", db[prefix.."BorderStyle"])
     
     if f.SetBackdrop then
         f:SetBackdrop({
@@ -19,8 +19,18 @@ local function ApplySkin(f)
             tile = true, tileSize = 16, edgeSize = 10,
             insets = { left = 3, right = 3, top = 3, bottom = 3 }
         })
-        f:SetBackdropColor(db.frameBackgroundColourR, db.frameBackgroundColourG, db.frameBackgroundColourB, db.frameBackgroundColourA)
-        f:SetBackdropBorderColor(db.frameBorderColourR, db.frameBorderColourG, db.frameBorderColourB, db.frameBorderColourA)
+        f:SetBackdropColor(
+            db[prefix.."BackgroundColourR"] or 0.1, 
+            db[prefix.."BackgroundColourG"] or 0.1, 
+            db[prefix.."BackgroundColourB"] or 0.1, 
+            db[prefix.."BackgroundColourA"] or 0.7
+        )
+        f:SetBackdropBorderColor(
+            db[prefix.."BorderColourR"] or 0.5, 
+            db[prefix.."BorderColourG"] or 0.5, 
+            db[prefix.."BorderColourB"] or 0.5, 
+            db[prefix.."BorderColourA"] or 1.0
+        )
     end
 end
 
@@ -37,8 +47,8 @@ end
 local function CreateCooldownBar(characterName, parent)
     local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
     f.characterName = characterName
+    f:SetFrameLevel(parent:GetFrameLevel() + 1)
 
-    -- Name label
     f.nameLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
     f.nameLabel:SetText(Ambiguate(characterName, "short"))
 
@@ -46,36 +56,32 @@ local function CreateCooldownBar(characterName, parent)
 
     f.UpdateLayout = function(self)
         if not EMA_Cooldowns.db then return end
-        local size = EMA_Cooldowns.db.iconSize
-        local margin = EMA_Cooldowns.db.iconMargin
-        local showNames = EMA_Cooldowns.db.showNames
-        local nameHeight = showNames and (EMA_Cooldowns.db.fontSize + 2) or 0
+        local db = EMA_Cooldowns.db
+        local size = db.iconSize
+        local margin = db.iconMargin
+        local showNames = db.showNames
+        local nameHeight = showNames and (db.fontSize + 2) or 0
         
-        local activeCount = 0
-        local charKey = Ambiguate(self.characterName, "none")
-        local cooldowns = EMA_Cooldowns.activeCooldowns[charKey] or {}
+        local charKey = Ambiguate(self.characterName, "none"):lower()
+        local class, _ = EMAApi.GetClass(self.characterName)
+        local classKey = class and class:upper() or "SHAMAN"
+        local tracked = EMA_Cooldowns.db.trackedSpells[classKey] or {}
         
-        -- Sort active cooldowns by remaining time
-        local sortedList = {}
-        for name, data in pairs(cooldowns) do
-            table.insert(sortedList, { name = name, data = data })
-        end
-        table.sort(sortedList, function(a, b) return (a.data.startTime + a.data.duration) < (b.data.startTime + b.data.duration) end)
-
-        -- Hide all icons first
         for _, iconFrame in ipairs(self.icons) do iconFrame:Hide() end
 
-        for i, info in ipairs(sortedList) do
+        local activeCount = 0
+        for i, spellInfo in ipairs(tracked) do
             activeCount = i
             if not self.icons[i] then
                 local b = CreateFrame("Frame", nil, self, "BackdropTemplate")
+                b:SetFrameLevel(self:GetFrameLevel() + 2)
                 b:SetBackdrop({
-                    edgeFile = "Interface\Buttons\WHITE8X8",
+                    edgeFile = "Interface\\Buttons\\WHITE8X8",
                     edgeSize = 1,
                 })
                 b:SetBackdropBorderColor(0, 0, 0, 1)
                 
-                b.icon = b:CreateTexture(nil, "ARTWORK")
+                b.icon = b:CreateTexture(nil, "OVERLAY")
                 b.icon:SetPoint("TOPLEFT", 1, -1)
                 b.icon:SetPoint("BOTTOMRIGHT", -1, 1)
                 b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
@@ -83,6 +89,10 @@ local function CreateCooldownBar(characterName, parent)
                 b.cooldown = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
                 b.cooldown:SetAllPoints(b.icon)
                 b.cooldown:SetDrawEdge(false)
+                b.cooldown:SetFrameLevel(b:GetFrameLevel() + 1)
+
+                b.timerText = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightLarge")
+                b.timerText:SetPoint("CENTER", 0, 0)
                 
                 self.icons[i] = b
             end
@@ -91,8 +101,35 @@ local function CreateCooldownBar(characterName, parent)
             b:SetSize(size, size)
             b:ClearAllPoints()
             b:SetPoint("BOTTOMLEFT", (i-1)*(size + margin) + 4, 4)
-            b.icon:SetTexture(info.data.icon)
-            b.cooldown:SetCooldown(info.data.startTime, info.data.duration)
+            b.icon:SetTexture(spellInfo.icon or 134400)
+            
+            local activeData = EMA_Cooldowns.activeCooldowns[charKey] and EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name]
+            if activeData then
+                local remaining = activeData.startTime + activeData.duration - GetTime()
+                if remaining > 0 then
+                    b.icon:SetAlpha(1.0)
+                    b.cooldown:SetCooldown(activeData.startTime, activeData.duration)
+                    b.cooldown:Show()
+                    if db.showTimers then
+                        local fontFile = SharedMedia:Fetch("font", db.fontStyle)
+                        b.timerText:SetFont(fontFile, db.timerFontSize, "OUTLINE")
+                        b.timerText:SetTextColor(db.timerColorR or 1, db.timerColorG or 1, db.timerColorB or 1)
+                        b.timerText:SetText(math.floor(remaining))
+                        b.timerText:Show()
+                    else
+                        b.timerText:Hide()
+                    end
+                else
+                    EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name] = nil
+                    b.icon:SetAlpha(0.4)
+                    b.cooldown:Hide()
+                    b.timerText:Hide()
+                end
+            else
+                b.icon:SetAlpha(0.4)
+                b.cooldown:Hide()
+                b.timerText:Hide()
+            end
             b:Show()
         end
 
@@ -107,7 +144,7 @@ local function CreateCooldownBar(characterName, parent)
             self.nameLabel:Hide()
         end
 
-        ApplySkin(self)
+        ApplySkin(self, "bar")
         ApplyFontStyle(self.nameLabel)
     end
 
@@ -136,6 +173,8 @@ function UI:Initialize()
         self.masterFrame:SetMovable(true)
         self.masterFrame:EnableMouse(true)
         self.masterFrame:RegisterForDrag("LeftButton")
+        self.masterFrame:SetFrameStrata("MEDIUM")
+        self.masterFrame:SetSize(200, 40)
         self.masterFrame:SetScript("OnDragStart", function(self)
             if not EMA_Cooldowns.db or not EMA_Cooldowns.db.lockBars or IsAltKeyDown() then
                 self:StartMoving()
@@ -165,12 +204,14 @@ function UI:RefreshBars()
     self.masterFrame:Show()
     self.masterFrame:SetScale(EMA_Cooldowns.db.barScale)
     self.masterFrame:SetAlpha(EMA_Cooldowns.db.barAlpha)
-    ApplySkin(self.masterFrame)
+    ApplySkin(self.masterFrame, "frame")
     
     local teamList = {}
-    for index, characterName in EMAApi.TeamListOrderedOnline() do
-        local class, color = EMAApi.GetClass(characterName)
-        table.insert(teamList, { name = characterName, position = index, color = color })
+    for index, characterName in EMAApi.TeamListOrdered() do
+        if EMAApi.GetCharacterOnlineStatus(characterName) == true and EMA_Cooldowns.db.enabledMembers[characterName] ~= false then
+            local class, color = EMAApi.GetClass(characterName)
+            table.insert(teamList, { name = characterName, position = index, color = color })
+        end
     end
 
     local order = EMA_Cooldowns.db.barOrder
@@ -180,6 +221,18 @@ function UI:RefreshBars()
         table.sort(teamList, function(a, b) return a.name > b.name end)
     elseif order == "EMAPosition" then
         table.sort(teamList, function(a, b) return a.position < b.position end)
+    elseif order == "RoleAsc" then
+        local roleWeights = { ["TANK"] = 1, ["HEALER"] = 2, ["DAMAGER"] = 3, ["NONE"] = 4 }
+        table.sort(teamList, function(a, b)
+            local unitA = Ambiguate(a.name, "none")
+            local unitB = Ambiguate(b.name, "none")
+            local roleA = UnitGroupRolesAssigned(unitA) or "NONE"
+            local roleB = UnitGroupRolesAssigned(unitB) or "NONE"
+            if roleA ~= roleB then
+                return (roleWeights[roleA] or 99) < (roleWeights[roleB] or 99)
+            end
+            return a.name < b.name
+        end)
     end
 
     for name, bar in pairs(self.teamBars) do bar:Hide() end
@@ -219,33 +272,17 @@ function UI:RefreshBars()
 end
 
 function UI:UpdateUI()
-    local currentTime = GetTime()
-    local needsLayoutUpdate = false
-
-    -- Clean up expired cooldowns
-    for charKey, cooldowns in pairs(EMA_Cooldowns.activeCooldowns) do
-        for spellName, data in pairs(cooldowns) do
-            if currentTime > (data.startTime + data.duration) then
-                cooldowns[spellName] = nil
-                needsLayoutUpdate = true
-            end
-        end
-    end
-
-    if needsLayoutUpdate or true then -- For now, update layout every tick to keep timers smooth
-        for _, bar in pairs(self.teamBars) do
-            if bar:IsShown() then
-                bar:UpdateLayout()
-            end
+    for _, bar in pairs(self.teamBars) do
+        if bar:IsShown() then
+            bar:UpdateLayout()
         end
     end
 end
 
--- Periodical update
 local updateFrame = CreateFrame("Frame")
 updateFrame:SetScript("OnUpdate", function(self, elapsed)
     self.elapsed = (self.elapsed or 0) + elapsed
-    if self.elapsed > 0.5 then
+    if self.elapsed > 0.1 then
         UI:UpdateUI()
         self.elapsed = 0
     end

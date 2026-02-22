@@ -268,6 +268,19 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
                             
                             local bInfo = self.delayedSpells[spellName]
                             local isBuffActive = false
+                            
+                            -- Fix: Scan unit buffs immediately to avoid the "timer blink"
+                            if bInfo then
+                                local units = {"player", "party1", "party2", "party3", "party4"}
+                                if IsInRaid() then for i=1,40 do table.insert(units, "raid"..i) end end
+                                for _, unit in ipairs(units) do
+                                    if GetUnitName(unit, true) == characterName then
+                                        self:ScanUnitBuffs(unit)
+                                        break
+                                    end
+                                end
+                            end
+
                             if bInfo and self.teamBuffs[charKey] then
                                 if self.teamBuffs[charKey][bInfo.name] then
                                     isBuffActive = true

@@ -6,6 +6,8 @@ Looking for Shaman-specific totem management? Check out [EMA Totems](https://git
 
 **Note:** This addon likely requires your team to be in the same guild and utilize **guild communications** for settings synchronization, however, all timers are tracked via the **combat log** for high-precision updates.
 
+Is this AI slop? probably, but it seem to work
+
 ## Key Features
 
 *   **Persistent Cooldown Tracking:** View all tracked spells for your entire team in one compact interface. Available spells are shown semi-transparently, while those on cooldown light up with circular animations and numeric timers.

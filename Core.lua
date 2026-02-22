@@ -301,6 +301,10 @@ function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
     end
 end
 
+function EMA_Cooldowns:EMAOnCommandReceived(sender, commandName, ...)
+    -- Handle commands if needed
+end
+
 function EMA_Cooldowns:BeforeEMAProfileChanged() end
 function EMA_Cooldowns:OnEMAProfileChanged()
     if self.completeDatabase then self.db = self.completeDatabase.profile end

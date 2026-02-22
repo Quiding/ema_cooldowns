@@ -88,6 +88,13 @@ local function CreateCooldownBar(characterName, parent)
                 b.icon:SetPoint("BOTTOMRIGHT", -1, 1)
                 b.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
                 
+                b.glow = b:CreateTexture(nil, "OVERLAY", nil, 7)
+                b.glow:SetTexture("Interface\\Buttons\\UI-ActionButton-Border")
+                b.glow:SetBlendMode("ADD")
+                b.glow:SetPoint("TOPLEFT", -4, 4)
+                b.glow:SetPoint("BOTTOMRIGHT", 4, -4)
+                b.glow:Hide()
+                
                 b.cooldown = CreateFrame("Cooldown", nil, b, "CooldownFrameTemplate")
                 b.cooldown:SetAllPoints(b.icon)
                 b.cooldown:SetDrawEdge(false)
@@ -105,8 +112,30 @@ local function CreateCooldownBar(characterName, parent)
             b:SetPoint("BOTTOMLEFT", (i-1)*(size + margin) + 4 + (self.leftExtraWidth or 0), 4)
             b.icon:SetTexture(spellInfo.icon or 134400)
             
+            local LBG = LibStub("LibButtonGlow-1.0", true)
             local activeData = EMA_Cooldowns.activeCooldowns[charKey] and EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name]
-            if activeData then
+            local buffName = EMA_Cooldowns.delayedSpells[spellInfo.name]
+            local isBuffActive = buffName and EMA_Cooldowns.teamBuffs[charKey] and EMA_Cooldowns.teamBuffs[charKey][buffName]
+            
+            local shouldGlow = false
+            if db.glowIfBuffActive and isBuffActive then shouldGlow = true end
+            if activeData and activeData.pendingBuff then shouldGlow = true end
+            
+            if shouldGlow then
+                if db.glowAnimated and LBG then
+                    b.glow:Hide()
+                    LBG.ShowOverlayGlow(b, { color = { db.glowColorR or 0, db.glowColorG or 1, db.glowColorB or 1, db.glowColorA or 1 } })
+                else
+                    if LBG then LBG.HideOverlayGlow(b) end
+                    b.glow:SetVertexColor(db.glowColorR or 0, db.glowColorG or 1, db.glowColorB or 1, db.glowColorA or 1)
+                    b.glow:Show()
+                end
+                b:SetAlpha(db.readyAlpha or 1.0)
+                b.cooldown:Hide()
+                b.timerText:Hide()
+            elseif activeData and not activeData.pendingBuff then
+                b.glow:Hide()
+                if LBG then LBG.HideOverlayGlow(b) end
                 local remaining = activeData.startTime + activeData.duration - GetTime()
                 if remaining > 0 then
                     b:SetAlpha(db.runningAlpha or 0.3)
@@ -128,6 +157,8 @@ local function CreateCooldownBar(characterName, parent)
                     b.timerText:Hide()
                 end
             else
+                b.glow:Hide()
+                if LBG then LBG.HideOverlayGlow(b) end
                 b:SetAlpha(db.readyAlpha or 1.0)
                 b.cooldown:Hide()
                 b.timerText:Hide()

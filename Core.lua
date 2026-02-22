@@ -32,6 +32,15 @@ end
 
 -- Initialize runtime tables
 EMA_Cooldowns.activeCooldowns = {}
+-- Spells that start cooldown only AFTER the buff is gone.
+-- Map: [SpellName] = BuffName
+EMA_Cooldowns.delayedSpells = {
+    ["Nature's Swiftness"] = "Nature's Swiftness",
+    ["Elemental Mastery"] = "Elemental Mastery",
+    ["Presence of Mind"] = "Presence of Mind",
+}
+-- Team active buffs: [charKey][buffName] = true
+EMA_Cooldowns.teamBuffs = {}
 
 local L = LibStub("AceLocale-3.0"):GetLocale("Core")
 local EMAUtilities = LibStub:GetLibrary("EbonyUtilities-1.0")
@@ -58,6 +67,10 @@ EMA_Cooldowns.settings = {
         -- Opacity
         runningAlpha = 0.3,
         readyAlpha = 1.0,
+        -- Glow
+        glowIfBuffActive = true,
+        glowAnimated = true,
+        glowColorR = 0.0, glowColorG = 1.0, glowColorB = 1.0, glowColorA = 1.0,
         -- Frame Styles
         frameBorderStyle = "Blizzard Tooltip",
         frameBackgroundStyle = "Blizzard Dialog Background",
@@ -161,15 +174,73 @@ end
 function EMA_Cooldowns:OnEnable()
     self:RegisterEvent("PLAYER_LOGIN")
     self:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED")
+    self:RegisterEvent("UNIT_AURA")
     if EMAApi then
         self:RegisterMessage( EMAApi.MESSAGE_CHARACTER_ONLINE, "RefreshTeamStatus" )
         self:RegisterMessage( EMAApi.MESSAGE_CHARACTER_OFFLINE, "RefreshTeamStatus" )
     end
     if ns.UI then ns.UI:Initialize() end
+    self:ScheduleRepeatingTimer("ScanTeamBuffs", 0.5)
 end
 
-function EMA_Cooldowns:RefreshTeamStatus() ns.UI:RefreshBars() end
-function EMA_Cooldowns:PLAYER_LOGIN() if ns.UI then ns.UI:RefreshBars() end end
+function EMA_Cooldowns:RefreshTeamStatus() 
+    self:ScanTeamBuffs()
+    ns.UI:RefreshBars() 
+end
+function EMA_Cooldowns:PLAYER_LOGIN() 
+    self:ScanTeamBuffs()
+    if ns.UI then ns.UI:RefreshBars() end 
+end
+
+function EMA_Cooldowns:UNIT_AURA(event, unit)
+    if not unit then return end
+    self:ScanUnitBuffs(unit)
+end
+
+function EMA_Cooldowns:ScanTeamBuffs()
+    self:ScanUnitBuffs("player")
+    for i = 1, 4 do self:ScanUnitBuffs("party"..i) end
+    if IsInRaid() then
+        for i = 1, 40 do self:ScanUnitBuffs("raid"..i) end
+    end
+end
+
+function EMA_Cooldowns:ScanUnitBuffs(unit)
+    local characterName = GetUnitName(unit, true)
+    if not characterName or not EMAApi.IsCharacterInTeam(characterName) then return end
+    local charKey = Ambiguate(characterName, "none"):lower()
+    self.teamBuffs[charKey] = self.teamBuffs[charKey] or {}
+    
+    local foundAnyBuff = {}
+    for i = 1, 40 do
+        local name = UnitBuff(unit, i)
+        if not name then break end
+        foundAnyBuff[name] = true
+        self.teamBuffs[charKey][name] = true
+    end
+
+    -- Update existing pending cooldowns if the buff is now gone
+    if self.activeCooldowns[charKey] then
+        for spellName, data in pairs(self.activeCooldowns[charKey]) do
+            if data.pendingBuff then
+                local buffName = self.delayedSpells[spellName]
+                if not foundAnyBuff[buffName] then
+                    -- Buff is gone, start the cooldown now!
+                    data.startTime = GetTime()
+                    data.pendingBuff = false
+                    ns.UI:UpdateUI()
+                end
+            end
+        end
+    end
+
+    -- Cleanup teamBuffs
+    for bName, _ in pairs(self.teamBuffs[charKey]) do
+        if not foundAnyBuff[bName] then
+            self.teamBuffs[charKey][bName] = nil
+        end
+    end
+end
 
 function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
     local _, event, _, sourceGUID, sourceName, _, _, destGUID, destName, _, _, spellID, spellName = CombatLogGetCurrentEventInfo()
@@ -185,7 +256,16 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
                         if spellInfo.name == spellName or (spellInfo.id ~= 0 and tostring(spellInfo.id) == tostring(spellID)) then
                             local charKey = Ambiguate(characterName, "none"):lower()
                             self.activeCooldowns[charKey] = self.activeCooldowns[charKey] or {}
-                            self.activeCooldowns[charKey][spellName] = { startTime = GetTime(), duration = spellInfo.duration }
+                            
+                            local buffName = self.delayedSpells[spellName]
+                            local isBuffActive = buffName and self.teamBuffs[charKey] and self.teamBuffs[charKey][buffName]
+                            
+                            if isBuffActive then
+                                -- Buff is active, don't start timer yet, mark as pending
+                                self.activeCooldowns[charKey][spellName] = { startTime = 0, duration = spellInfo.duration, pendingBuff = true }
+                            else
+                                self.activeCooldowns[charKey][spellName] = { startTime = GetTime(), duration = spellInfo.duration, pendingBuff = false }
+                            end
                             ns.UI:UpdateUI()
                             break
                         end
@@ -260,6 +340,16 @@ function EMA_Cooldowns:SettingsCreate()
     self.settingsControl.sliderReadyAlpha:SetSliderValues(0.1, 1.0, 0.01)
     self.settingsControl.sliderReadyAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.readyAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
+
+    EMAHelperSettings:CreateHeading(self.settingsControl, "Buff Active Glow", movingTop, false)
+    movingTop = movingTop - headingHeight
+    self.settingsControl.checkBoxGlowIfBuffActive = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Glow when associated buff is active", function(w, e, v) self.db.glowIfBuffActive = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - checkBoxHeight
+    self.settingsControl.checkBoxGlowAnimated = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Glow Animation", function(w, e, v) self.db.glowAnimated = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - checkBoxHeight
+    self.settingsControl.colorGlow = EMAHelperSettings:CreateColourPicker(self.settingsControl, headingWidth, left, movingTop, "Glow Color")
+    self.settingsControl.colorGlow:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.glowColorR, self.db.glowColorG, self.db.glowColorB, self.db.glowColorA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - 30
 
     EMAHelperSettings:CreateHeading(self.settingsControl, "Appearance: Whole UI Frame", movingTop, false)
     movingTop = movingTop - headingHeight
@@ -486,6 +576,12 @@ function EMA_Cooldowns:SettingsRefresh()
         
         self.settingsControl.sliderRunningAlpha:SetValue(db.runningAlpha or 0.3)
         self.settingsControl.sliderReadyAlpha:SetValue(db.readyAlpha or 1.0)
+        
+        self.settingsControl.checkBoxGlowIfBuffActive:SetValue(db.glowIfBuffActive)
+        self.settingsControl.checkBoxGlowAnimated:SetValue(db.glowAnimated)
+        self.settingsControl.checkBoxGlowAnimated:SetDisabled(not db.glowIfBuffActive)
+        self.settingsControl.colorGlow:SetColor(db.glowColorR or 0, db.glowColorG or 1, db.glowColorB or 1, db.glowColorA or 1)
+        self.settingsControl.colorGlow:SetDisabled(not db.glowIfBuffActive)
         
         -- Frame Styles
         self.settingsControl.dropdownFrameBorder:SetValue(db.frameBorderStyle or "Blizzard Tooltip")

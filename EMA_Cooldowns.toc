@@ -1,0 +1,10 @@
+## Interface: 11503
+## Title: EMA - Cooldowns
+## Notes: A plugin for EMA that manages cooldown bars for the whole team.
+## Author: Gemini CLI
+## Version: 1.0.0
+## RequiredDeps: EMA
+## SavedVariables: EMA_CooldownsProfileDB
+
+Core.lua
+UI.lua

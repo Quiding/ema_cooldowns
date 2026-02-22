@@ -300,6 +300,7 @@ function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
         end
         self:SettingsRefresh()
         ns.UI:RefreshBars()
+        ns.UI:UpdatePositionFromDB()
     end
 end
 

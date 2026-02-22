@@ -2,7 +2,7 @@
 
 A Gemini-generated plugin for **EMA (Ebony's MultiBoxing Assistant)** [https://www.curseforge.com/wow/addons/ema](https://www.curseforge.com/wow/addons/ema). This addon provides persistent, team-wide cooldown tracking bars for all character classes.
 
-Looking for Shaman-specific totem management? Check out [EMA Totems](https://github.com/Quiding/ema_totembar).
+Looking for other team-wide tracking? Check out [EMA Buffs](https://github.com/Quiding/ema_buffs) or Shaman-specific [EMA Totems](https://github.com/Quiding/ema_totems).
 
 **Note:** This addon likely requires your team to be in the same guild and utilize **guild communications** for settings synchronization, however, all timers are tracked via the **combat log** for high-precision updates.
 

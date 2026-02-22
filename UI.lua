@@ -114,7 +114,8 @@ local function CreateCooldownBar(characterName, parent)
             
             local LBG = LibStub("LibButtonGlow-1.0", true)
             local activeData = EMA_Cooldowns.activeCooldowns[charKey] and EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name]
-            local buffName = EMA_Cooldowns.delayedSpells[spellInfo.name]
+            local bInfo = EMA_Cooldowns.delayedSpells[spellInfo.name]
+            local buffName = bInfo and bInfo.name
             local isBuffActive = buffName and EMA_Cooldowns.teamBuffs[charKey] and EMA_Cooldowns.teamBuffs[charKey][buffName]
             
             local shouldGlow = false

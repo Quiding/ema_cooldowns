@@ -33,11 +33,11 @@ end
 -- Initialize runtime tables
 EMA_Cooldowns.activeCooldowns = {}
 -- Spells that start cooldown only AFTER the buff is gone.
--- Map: [SpellName] = BuffName
+-- Map: [SpellName] = { buffName, buffID }
 EMA_Cooldowns.delayedSpells = {
-    ["Nature's Swiftness"] = "Nature's Swiftness",
-    ["Elemental Mastery"] = "Elemental Mastery",
-    ["Presence of Mind"] = "Presence of Mind",
+    ["Nature's Swiftness"] = { name = "Nature's Swiftness", id = 16188 },
+    ["Elemental Mastery"] = { name = "Elemental Mastery", id = 16166 },
+    ["Presence of Mind"] = { name = "Presence of Mind", id = 12043 },
 }
 -- Team active buffs: [charKey][buffName] = true
 EMA_Cooldowns.teamBuffs = {}
@@ -212,10 +212,12 @@ function EMA_Cooldowns:ScanUnitBuffs(unit)
     self.teamBuffs[charKey] = self.teamBuffs[charKey] or {}
     
     local foundAnyBuff = {}
+    local foundAnyBuffID = {}
     for i = 1, 40 do
-        local name = UnitBuff(unit, i)
+        local name, _, _, _, _, _, _, _, _, spellID = UnitBuff(unit, i)
         if not name then break end
         foundAnyBuff[name] = true
+        if spellID then foundAnyBuffID[spellID] = true end
         self.teamBuffs[charKey][name] = true
     end
 
@@ -223,8 +225,15 @@ function EMA_Cooldowns:ScanUnitBuffs(unit)
     if self.activeCooldowns[charKey] then
         for spellName, data in pairs(self.activeCooldowns[charKey]) do
             if data.pendingBuff then
-                local buffName = self.delayedSpells[spellName]
-                if not foundAnyBuff[buffName] then
+                local bInfo = self.delayedSpells[spellName]
+                local stillHasBuff = false
+                if bInfo then
+                    if foundAnyBuff[bInfo.name] or (bInfo.id and foundAnyBuffID[bInfo.id]) then
+                        stillHasBuff = true
+                    end
+                end
+                
+                if not stillHasBuff then
                     -- Buff is gone, start the cooldown now!
                     data.startTime = GetTime()
                     data.pendingBuff = false
@@ -257,8 +266,13 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
                             local charKey = Ambiguate(characterName, "none"):lower()
                             self.activeCooldowns[charKey] = self.activeCooldowns[charKey] or {}
                             
-                            local buffName = self.delayedSpells[spellName]
-                            local isBuffActive = buffName and self.teamBuffs[charKey] and self.teamBuffs[charKey][buffName]
+                            local bInfo = self.delayedSpells[spellName]
+                            local isBuffActive = false
+                            if bInfo and self.teamBuffs[charKey] then
+                                if self.teamBuffs[charKey][bInfo.name] then
+                                    isBuffActive = true
+                                end
+                            end
                             
                             if isBuffActive then
                                 -- Buff is active, don't start timer yet, mark as pending

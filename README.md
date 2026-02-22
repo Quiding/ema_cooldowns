@@ -6,7 +6,7 @@ Looking for Shaman-specific totem management? Check out [EMA Totems](https://git
 
 **Note:** This addon likely requires your team to be in the same guild and utilize **guild communications** for settings synchronization, however, all timers are tracked via the **combat log** for high-precision updates.
 
-Is this AI slop? probably, but it seem to work
+Is this AI slop? probably, but it seems to work
 
 ## Key Features
 

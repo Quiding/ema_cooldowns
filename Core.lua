@@ -340,6 +340,7 @@ function EMA_Cooldowns:SettingsCreate()
     local checkBoxHeight, sliderHeight = EMAHelperSettings:GetCheckBoxHeight(), EMAHelperSettings:GetSliderHeight()
     local dropdownHeight, verticalSpacing = EMAHelperSettings:GetDropdownHeight(), EMAHelperSettings:GetVerticalSpacing()
     local halfWidth = headingWidth / 2
+    local movingTop = top
     
     EMAHelperSettings:CreateHeading(self.settingsControl, "General Options", movingTop, false)
     movingTop = movingTop - headingHeight

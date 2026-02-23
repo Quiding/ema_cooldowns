@@ -339,7 +339,6 @@ function EMA_Cooldowns:SettingsCreate()
     local headingHeight, headingWidth = EMAHelperSettings:HeadingHeight(), EMAHelperSettings:HeadingWidth(true)
     local checkBoxHeight, sliderHeight = EMAHelperSettings:GetCheckBoxHeight(), EMAHelperSettings:GetSliderHeight()
     local dropdownHeight, verticalSpacing = EMAHelperSettings:GetDropdownHeight(), EMAHelperSettings:GetVerticalSpacing()
-    local movingTop = top
     local halfWidth = headingWidth / 2
     
     EMAHelperSettings:CreateHeading(self.settingsControl, "General Options", movingTop, false)
@@ -350,15 +349,15 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - checkBoxHeight
     self.settingsControl.checkBoxShowNames = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Show Character Names", function(w, e, v) self.db.showNames = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
-    self.settingsControl.dropdownOrder = EMAHelperSettings:CreateDropdown(self.settingsControl, halfWidth, left, movingTop, "Bar Order")
+    self.settingsControl.dropdownOrder = EMAHelperSettings:CreateDropdown(self.settingsControl, 450, left + 20, movingTop, "Bar Order")
     self.settingsControl.dropdownOrder:SetList({ ["NameAsc"] = "Name (Asc)", ["NameDesc"] = "Name (Desc)", ["EMAPosition"] = "EMA Team Order", ["RoleAsc"] = "Role (Tank > Healer > DPS)" })
     self.settingsControl.dropdownOrder:SetCallback("OnValueChanged", function(w, e, v) self.db.barOrder = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - dropdownHeight - verticalSpacing
-    self.settingsControl.sliderScale = EMAHelperSettings:CreateSlider(self.settingsControl, halfWidth, left, movingTop, "Overall Scale")
+    self.settingsControl.sliderScale = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "Overall Scale")
     self.settingsControl.sliderScale:SetSliderValues(0.5, 2.0, 0.01)
     self.settingsControl.sliderScale:SetCallback("OnValueChanged", function(w, e, v) self.db.barScale = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
-    self.settingsControl.sliderAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, halfWidth, left, movingTop, "Overall Alpha")
+    self.settingsControl.sliderAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "Overall Alpha")
     self.settingsControl.sliderAlpha:SetSliderValues(0.1, 1.0, 0.01)
     self.settingsControl.sliderAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.barAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
@@ -371,14 +370,14 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - checkBoxHeight
     self.settingsControl.checkBoxGlowAnimated = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Glow Animation", function(w, e, v) self.db.glowAnimated = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
-    self.settingsControl.colorGlow = EMAHelperSettings:CreateColourPicker(self.settingsControl, halfWidth, left, movingTop, "Glow Color")
+    self.settingsControl.colorGlow = EMAHelperSettings:CreateColourPicker(self.settingsControl, 450, left + 20, movingTop, "Glow Color")
     self.settingsControl.colorGlow:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.glowColorR, self.db.glowColorG, self.db.glowColorB, self.db.glowColorA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
-    self.settingsControl.sliderRunningAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, halfWidth, left, movingTop, "On cooldown")
+    self.settingsControl.sliderRunningAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "On cooldown")
     self.settingsControl.sliderRunningAlpha:SetSliderValues(0.1, 1.0, 0.01)
     self.settingsControl.sliderRunningAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.runningAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
-    self.settingsControl.sliderReadyAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, halfWidth, left, movingTop, "Ready")
+    self.settingsControl.sliderReadyAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "Ready")
     self.settingsControl.sliderReadyAlpha:SetSliderValues(0.1, 1.0, 0.01)
     self.settingsControl.sliderReadyAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.readyAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight

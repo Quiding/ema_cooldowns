@@ -46,7 +46,7 @@ local L = LibStub("AceLocale-3.0"):GetLocale("Core")
 local EMAUtilities = LibStub:GetLibrary("EbonyUtilities-1.0")
 
 -- EMA metadata
-EMA_Cooldowns.parentDisplayName = "Class"
+EMA_Cooldowns.parentDisplayName = "Buffs & Cooldowns"
 EMA_Cooldowns.moduleDisplayName = "Cooldowns"
 EMA_Cooldowns.moduleIcon = "Interface\\Addons\\EMA\\Media\\SettingsIcon.tga"
 EMA_Cooldowns.moduleOrder = 11
@@ -91,6 +91,8 @@ EMA_Cooldowns.settings = {
         timerFontSize = 14,
         timerColorR = 1.0, timerColorG = 1.0, timerColorB = 1.0,
         enabledMembers = {},
+        breakUpBars = false,
+        individualBarPositions = {},
         trackedSpells = {
             ["WARRIOR"] = {}, ["PALADIN"] = {}, ["HUNTER"] = {}, ["ROGUE"] = {},
             ["PRIEST"] = {}, ["DEATHKNIGHT"] = {}, ["SHAMAN"] = {}, ["MAGE"] = {},
@@ -100,7 +102,131 @@ EMA_Cooldowns.settings = {
     }
 }
 
+local function PatchSharedMediaWidgets()
+    local EMAHelperSettings = LibStub:GetLibrary("EMAHelperSettings-1.0", true)
+    if not EMAHelperSettings or EMAHelperSettings.EMAPatchedV4 then return end
+
+    local function FixLayout(widget)
+        if not widget or not widget.frame then return end
+        local frame = widget.frame
+        
+        -- Force widget height
+        widget:SetHeight(85)
+        frame:SetHeight(85)
+        
+        if frame.label then
+            frame.label:ClearAllPoints()
+            frame.label:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+            frame.label:SetPoint("TOPRIGHT", frame, "TOPRIGHT", 0, 0)
+            frame.label:SetJustifyH("LEFT")
+            frame.label:SetHeight(20)
+        end
+
+        if frame.displayButton then
+            frame.displayButton:ClearAllPoints()
+            -- Position texture preview square below the label
+            frame.displayButton:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, -25)
+            frame.displayButton:SetSize(42, 42)
+            
+            if frame.DLeft then
+                frame.DLeft:ClearAllPoints()
+                -- Anchor dropdown box to the right of the texture preview with a 10px gap
+                frame.DLeft:SetPoint("LEFT", frame.displayButton, "RIGHT", 10, 0)
+                
+                if frame.DRight then
+                    frame.DRight:ClearAllPoints()
+                    frame.DRight:SetPoint("TOP", frame.DLeft, "TOP")
+                    frame.DRight:SetPoint("RIGHT", frame, "RIGHT", 0, 0)
+                end
+                
+                if frame.DMiddle then
+                    frame.DMiddle:ClearAllPoints()
+                    frame.DMiddle:SetPoint("TOP", frame.DLeft, "TOP")
+                    frame.DMiddle:SetPoint("LEFT", frame.DLeft, "RIGHT")
+                    frame.DMiddle:SetPoint("RIGHT", frame.DRight, "LEFT")
+                end
+
+                if frame.text then
+                    frame.text:ClearAllPoints()
+                    frame.text:SetPoint("LEFT", frame.DLeft, "LEFT", 26, 1)
+                    frame.text:SetPoint("RIGHT", frame.DRight, "RIGHT", -43, 1)
+                    frame.text:SetJustifyH("RIGHT")
+                end
+
+                if frame.dropButton then
+                    frame.dropButton:ClearAllPoints()
+                    frame.dropButton:SetPoint("TOPRIGHT", frame.DRight, "TOPRIGHT", -16, -18)
+                    
+                    -- Create or update the clickable overlay for the entire bar
+                    if not frame.clickableOverlay then
+                        frame.clickableOverlay = CreateFrame("Button", nil, frame)
+                        frame.clickableOverlay:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+                        frame.clickableOverlay:SetScript("OnClick", function()
+                            if frame.dropButton then
+                                frame.dropButton:Click()
+                            end
+                        end)
+                    end
+                    frame.clickableOverlay:ClearAllPoints()
+                    frame.clickableOverlay:SetPoint("TOPLEFT", frame.DLeft, "TOPLEFT", 15, -15)
+                    frame.clickableOverlay:SetPoint("BOTTOMRIGHT", frame.DRight, "BOTTOMRIGHT", -15, 15)
+                end
+            end
+        end
+    end
+
+    local AceGUI = LibStub("AceGUI-3.0", true)
+    if AceGUI then
+        -- Fix for missing values in sliders/dropdowns on initial show
+        local oldAcquire = AceGUI.Acquire
+        AceGUI.Acquire = function(self, type)
+            local widget = oldAcquire(self, type)
+            if not widget then return widget end
+            
+            -- Patch media widgets layout
+            if widget.frame and type and type:find("^LSM30_") then
+                widget.alignoffset = 0
+                FixLayout(widget)
+                if not widget.EMAPatchedHookV4 then
+                    hooksecurefunc(widget, "SetLabel", function() FixLayout(widget) end)
+                    hooksecurefunc(widget, "SetWidth", function() FixLayout(widget) end)
+                    widget.EMAPatchedHookV4 = true
+                end
+            end
+            
+            -- Fix for Slider initial values not showing in editbox
+            if type == "Slider" and not widget.EMASliderPatched then
+                hooksecurefunc(widget, "SetValue", function(w, val)
+                    if w.editbox and not w.editbox:HasFocus() then
+                        w:SetIsPercent(w.ispercent) -- Triggers UpdateText internally
+                    end
+                end)
+                widget.EMASliderPatched = true
+            end
+            
+            return widget
+        end
+    end
+
+    local methods = {"CreateMediaStatus", "CreateMediaBorder", "CreateMediaBackground", "CreateMediaFont", "CreateMediaSound"}
+    for _, m in ipairs(methods) do
+        local old = EMAHelperSettings[m]
+        if old then
+            EMAHelperSettings[m] = function(self, ...)
+                local w = old(self, ...)
+                if w then
+                    FixLayout(w)
+                    C_Timer.After(0.01, function() FixLayout(w) end)
+                end
+                return w
+            end
+        end
+    end
+    EMAHelperSettings.EMAPatchedV4 = true
+end
+
 function EMA_Cooldowns:OnInitialize()
+    PatchSharedMediaWidgets()
     self.completeDatabase = LibStub("AceDB-3.0"):New(self.settingsDatabaseName, self.settings)
     self.db = self.completeDatabase.profile
     self.characterName = UnitName("player")
@@ -114,21 +240,54 @@ function EMA_Cooldowns:OnInitialize()
     hooksecurefunc("HandleModifiedItemClick", function(link) self:HandleSpellHook(link) end)
 end
 
-function EMA_Cooldowns:GetSpellInfoRobust(search)
+function EMA_Cooldowns:GetSpellOrItemInfoRobust(search)
     if not search or search == "" then return nil end
-    local name, icon, spellID
+    local name, icon, id
+    
+    -- Check Spell
     if tonumber(search) then
-        name, _, icon, _, _, _, spellID = GetSpellInfo(tonumber(search))
-        if name then return name, icon, spellID end
+        name, _, icon, _, _, _, id = GetSpellInfo(tonumber(search))
+        if name then return name, icon, id, "spell" end
     end
-    name, _, icon, _, _, _, spellID = GetSpellInfo(search)
-    if name then return name, icon, spellID end
+    name, _, icon, _, _, _, id = GetSpellInfo(search)
+    if name then return name, icon, id, "spell" end
+    
+    -- Check Item
+    if tonumber(search) then
+        name, _, _, _, _, _, _, _, _, icon = GetItemInfo(tonumber(search))
+        if not name then
+            -- Try instant info for uncached items
+            local _, _, _, _, itemTexture = GetItemInfoInstant(tonumber(search))
+            if itemTexture then
+                return tostring(search), itemTexture, tonumber(search), "item"
+            end
+        else
+            return name, icon, tonumber(search), "item"
+        end
+    end
+    name, _, _, _, _, _, _, _, _, icon = GetItemInfo(search)
+    if name then
+        local _, link = GetItemInfo(search)
+        local itemID = string.match(link or "", "item:(%d+)")
+        return name, icon, tonumber(itemID) or 0, "item"
+    end
+    
+    -- Check if it's a name but uncached - use Instant info to find it
     local searchLower = search:lower()
-    for i = 1, 100000 do
+    if not tonumber(search) then
+        for i = 1, 100000 do
+            local n, _, _, _, iconInstant = GetItemInfoInstant(i)
+            if n and n:lower() == searchLower then
+                return n, iconInstant, i, "item"
+            end
+        end
+    end
+
+    for i = 1, 250000 do
         local n = GetSpellInfo(i)
         if n and n:lower() == searchLower then
-            name, _, icon, _, _, _, spellID = GetSpellInfo(i)
-            return name, icon, spellID
+            name, _, icon, _, _, _, id = GetSpellInfo(i)
+            return name, icon, id, "spell"
         end
     end
     return nil
@@ -142,11 +301,19 @@ function EMA_Cooldowns:HandleSpellHook(link)
             local spellID = string.match(link, "spell:(%d+)")
             if spellID then
                 local name, _, icon = GetSpellInfo(tonumber(spellID))
-                if name then
-                    self.settingsControl.editBoxAddSpell:SetText(name)
-                    local cooldown = GetSpellBaseCooldown(tonumber(spellID)) or 0
+                self.settingsControl.editBoxAddSpell:SetText(name or spellID)
+                local cooldown = GetSpellBaseCooldown(tonumber(spellID)) or 0
+                if self.selectedManageCategory == "Spells" then
                     self.settingsControl.editBoxDuration:SetText(tostring(cooldown / 1000))
+                else
+                    self.settingsControl.editBoxDuration:SetText("60")
                 end
+            end
+            local itemID = string.match(link, "item:(%d+)")
+            if itemID then
+                local name, _, _, _, _, _, _, _, _, icon = GetItemInfo(tonumber(itemID))
+                self.settingsControl.editBoxAddSpell:SetText(name or itemID)
+                self.settingsControl.editBoxDuration:SetText("60")
             end
         end
     end
@@ -256,14 +423,20 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
     if event == "SPELL_CAST_SUCCESS" or event == "SPELL_SUMMON" then
         local characterName = EMAUtilities:AddRealmToNameIfMissing(sourceName or "")
         if EMAApi.IsCharacterInTeam(characterName) then
+            local charKey = Ambiguate(characterName, "none"):lower()
             local class, _ = EMAApi.GetClass(characterName)
+            
+            -- Build potential lists to check
+            local listsToCheck = {}
             if class then
                 local classKey = class:upper()
-                local spellList = self.db.trackedSpells[classKey]
+                table.insert(listsToCheck, self.db.trackedSpells[classKey])
+            end
+
+            for _, spellList in ipairs(listsToCheck) do
                 if spellList then
                     for _, spellInfo in ipairs(spellList) do
                         if spellInfo.name == spellName or (spellInfo.id ~= 0 and tostring(spellInfo.id) == tostring(spellID)) then
-                            local charKey = Ambiguate(characterName, "none"):lower()
                             self.activeCooldowns[charKey] = self.activeCooldowns[charKey] or {}
                             
                             local bInfo = self.delayedSpells[spellName]
@@ -294,7 +467,7 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
                                 self.activeCooldowns[charKey][spellName] = { startTime = GetTime(), duration = spellInfo.duration, pendingBuff = false }
                             end
                             ns.UI:UpdateUI()
-                            break
+                            return -- Found it, stop searching other lists
                         end
                     end
                 end
@@ -332,8 +505,8 @@ function EMA_Cooldowns:SettingsCreate()
     self.settingsControl = {}
     self.settingsControlClass = {}
     local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
-    EMAHelperSettings:CreateSettings(self.settingsControlClass, "Class", "Class", function() end, "Interface\\AddOns\\EMA\\Media\\TeamCore.tga", 5)
-    EMAHelperSettings:CreateSettings(self.settingsControl, "Cooldowns", "Class", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11)
+    EMAHelperSettings:CreateSettings(self.settingsControlClass, "Buffs & Cooldowns", "Buffs & Cooldowns", function() end, "Interface\\AddOns\\EMA\\Media\\TeamCore.tga", 6)
+    EMAHelperSettings:CreateSettings(self.settingsControl, "Cooldowns", "Buffs & Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11)
     
     local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()
     local headingHeight, headingWidth = EMAHelperSettings:HeadingHeight(), EMAHelperSettings:HeadingWidth(true)
@@ -346,11 +519,27 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - headingHeight
     self.settingsControl.checkBoxShowBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Show Cooldown Bars", function(w, e, v) self.db.showBars = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
-    self.settingsControl.checkBoxLockBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Lock Bars (Alt-Click to move)", function(w, e, v) self.db.lockBars = v; self:SettingsRefresh() end)
+    self.settingsControl.checkBoxLockBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Lock Bars", function(w, e, v) self.db.lockBars = v; self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
     self.settingsControl.checkBoxShowNames = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Show Character Names", function(w, e, v) self.db.showNames = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
-    self.settingsControl.dropdownOrder = EMAHelperSettings:CreateDropdown(self.settingsControl, 450, left + 20, movingTop, "Bar Order")
+    self.settingsControl.checkBoxBreakUpBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Ungrouped Bars (Independent Movement)", function(w, e, v) self.db.breakUpBars = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - checkBoxHeight
+    self.settingsControl.buttonResetPositions = EMAHelperSettings:CreateButton(self.settingsControl, headingWidth, left, movingTop, "Reset All Independent Bar Positions", function() 
+        self.db.individualBarPositions = {}
+        if ns.UI and ns.UI.teamBars then
+            for characterName, bar in pairs(ns.UI.teamBars) do
+                local charKey = Ambiguate(characterName, "none"):lower()
+                self.db.individualBarPositions[charKey] = { point = "CENTER", relativePoint = "CENTER", x = 0, y = 0 }
+                bar:ClearAllPoints()
+                bar:SetPoint("CENTER", UIParent, "CENTER", 0, 0)
+            end
+        end
+        ns.UI:RefreshBars()
+        self:Print("Independent bar positions reset to center.") 
+    end)
+    movingTop = movingTop - 30
+    self.settingsControl.dropdownOrder = EMAHelperSettings:CreateDropdown(self.settingsControl, 440, left, movingTop, "Bar Order")
     self.settingsControl.dropdownOrder:SetList({ ["NameAsc"] = "Name (Asc)", ["NameDesc"] = "Name (Desc)", ["EMAPosition"] = "EMA Team Order", ["RoleAsc"] = "Role (Tank > Healer > DPS)" })
     self.settingsControl.dropdownOrder:SetCallback("OnValueChanged", function(w, e, v) self.db.barOrder = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - dropdownHeight - verticalSpacing
@@ -371,45 +560,45 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - checkBoxHeight
     self.settingsControl.checkBoxGlowAnimated = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Glow Animation", function(w, e, v) self.db.glowAnimated = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
-    self.settingsControl.colorGlow = EMAHelperSettings:CreateColourPicker(self.settingsControl, 450, left + 20, movingTop, "Glow Color")
+    self.settingsControl.colorGlow = EMAHelperSettings:CreateColourPicker(self.settingsControl, 440, left, movingTop, "Glow Color")
     self.settingsControl.colorGlow:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.glowColorR, self.db.glowColorG, self.db.glowColorB, self.db.glowColorA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
     self.settingsControl.sliderRunningAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "On cooldown")
-    self.settingsControl.sliderRunningAlpha:SetSliderValues(0.1, 1.0, 0.01)
+    self.settingsControl.sliderRunningAlpha:SetSliderValues(0.0, 1.0, 0.01)
     self.settingsControl.sliderRunningAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.runningAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
     self.settingsControl.sliderReadyAlpha = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "Ready")
-    self.settingsControl.sliderReadyAlpha:SetSliderValues(0.1, 1.0, 0.01)
+    self.settingsControl.sliderReadyAlpha:SetSliderValues(0.0, 1.0, 0.01)
     self.settingsControl.sliderReadyAlpha:SetCallback("OnValueChanged", function(w, e, v) self.db.readyAlpha = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
 
     EMAHelperSettings:CreateHeading(self.settingsControl, "Appearance: Whole UI Frame", movingTop, false)
     movingTop = movingTop - headingHeight
-    self.settingsControl.dropdownFrameBorder = EMAHelperSettings:CreateMediaBorder(self.settingsControl, halfWidth, left, movingTop, "UI Border Style")
+    self.settingsControl.dropdownFrameBorder = EMAHelperSettings:CreateMediaBorder(self.settingsControl, 440, left, movingTop, "UI Border Style")
     self.settingsControl.dropdownFrameBorder:SetCallback("OnValueChanged", function(w, e, v) self.db.frameBorderStyle = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
-    movingTop = movingTop - 110
-    self.settingsControl.dropdownFrameBackground = EMAHelperSettings:CreateMediaBackground(self.settingsControl, halfWidth, left, movingTop, "UI Background Style")
+    movingTop = movingTop - 85
+    self.settingsControl.dropdownFrameBackground = EMAHelperSettings:CreateMediaBackground(self.settingsControl, 440, left, movingTop, "UI Background Style")
     self.settingsControl.dropdownFrameBackground:SetCallback("OnValueChanged", function(w, e, v) self.db.frameBackgroundStyle = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
-    movingTop = movingTop - 110
-    self.settingsControl.colorFrameBackground = EMAHelperSettings:CreateColourPicker(self.settingsControl, halfWidth, left, movingTop, "UI Background Color")
+    movingTop = movingTop - 85
+    self.settingsControl.colorFrameBackground = EMAHelperSettings:CreateColourPicker(self.settingsControl, 440, left, movingTop, "UI Background Color")
     self.settingsControl.colorFrameBackground:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.frameBackgroundColourR, self.db.frameBackgroundColourG, self.db.frameBackgroundColourB, self.db.frameBackgroundColourA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
-    self.settingsControl.colorFrameBorder = EMAHelperSettings:CreateColourPicker(self.settingsControl, halfWidth, left, movingTop, "UI Border Color")
+    self.settingsControl.colorFrameBorder = EMAHelperSettings:CreateColourPicker(self.settingsControl, 440, left, movingTop, "UI Border Color")
     self.settingsControl.colorFrameBorder:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.frameBorderColourR, self.db.frameBorderColourG, self.db.frameBorderColourB, self.db.frameBorderColourA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
 
     EMAHelperSettings:CreateHeading(self.settingsControl, "Appearance: Individual Bars", movingTop, false)
     movingTop = movingTop - headingHeight
-    self.settingsControl.dropdownBarBorder = EMAHelperSettings:CreateMediaBorder(self.settingsControl, halfWidth, left, movingTop, "Bar Border Style")
+    self.settingsControl.dropdownBarBorder = EMAHelperSettings:CreateMediaBorder(self.settingsControl, 440, left, movingTop, "Bar Border Style")
     self.settingsControl.dropdownBarBorder:SetCallback("OnValueChanged", function(w, e, v) self.db.barBorderStyle = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
-    movingTop = movingTop - 110
-    self.settingsControl.dropdownBarBackground = EMAHelperSettings:CreateMediaBackground(self.settingsControl, halfWidth, left, movingTop, "Bar Background Style")
+    movingTop = movingTop - 85
+    self.settingsControl.dropdownBarBackground = EMAHelperSettings:CreateMediaBackground(self.settingsControl, 440, left, movingTop, "Bar Background Style")
     self.settingsControl.dropdownBarBackground:SetCallback("OnValueChanged", function(w, e, v) self.db.barBackgroundStyle = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
-    movingTop = movingTop - 110
-    self.settingsControl.colorBarBackground = EMAHelperSettings:CreateColourPicker(self.settingsControl, halfWidth, left, movingTop, "Bar Background Color")
+    movingTop = movingTop - 85
+    self.settingsControl.colorBarBackground = EMAHelperSettings:CreateColourPicker(self.settingsControl, 440, left, movingTop, "Bar Background Color")
     self.settingsControl.colorBarBackground:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.barBackgroundColourR, self.db.barBackgroundColourG, self.db.barBackgroundColourB, self.db.barBackgroundColourA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
-    self.settingsControl.colorBarBorder = EMAHelperSettings:CreateColourPicker(self.settingsControl, halfWidth, left, movingTop, "Bar Border Color")
+    self.settingsControl.colorBarBorder = EMAHelperSettings:CreateColourPicker(self.settingsControl, 440, left, movingTop, "Bar Border Color")
     self.settingsControl.colorBarBorder:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.barBorderColourR, self.db.barBorderColourG, self.db.barBorderColourB, self.db.barBorderColourA = r, g, b, a; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
 
@@ -430,9 +619,9 @@ function EMA_Cooldowns:SettingsCreate()
 
     EMAHelperSettings:CreateHeading(self.settingsControl, "Text & Timers", movingTop, false)
     movingTop = movingTop - headingHeight
-    self.settingsControl.dropdownFont = EMAHelperSettings:CreateMediaFont(self.settingsControl, headingWidth, left, movingTop, "Font Style")
+    self.settingsControl.dropdownFont = EMAHelperSettings:CreateMediaFont(self.settingsControl, 440, left, movingTop, "Font Style")
     self.settingsControl.dropdownFont:SetCallback("OnValueChanged", function(w, e, v) self.db.fontStyle = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
-    movingTop = movingTop - 110
+    movingTop = movingTop - 85
     self.settingsControl.sliderFontSize = EMAHelperSettings:CreateSlider(self.settingsControl, headingWidth, left, movingTop, "Name Font Size")
     self.settingsControl.sliderFontSize:SetSliderValues(6, 24, 1)
     self.settingsControl.sliderFontSize:SetCallback("OnValueChanged", function(w, e, v) self.db.fontSize = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
@@ -443,7 +632,7 @@ function EMA_Cooldowns:SettingsCreate()
     self.settingsControl.sliderTimerFontSize:SetSliderValues(6, 32, 1)
     self.settingsControl.sliderTimerFontSize:SetCallback("OnValueChanged", function(w, e, v) self.db.timerFontSize = tonumber(v); ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - sliderHeight
-    self.settingsControl.colorTimer = EMAHelperSettings:CreateColourPicker(self.settingsControl, headingWidth, left, movingTop, "Timer Color")
+    self.settingsControl.colorTimer = EMAHelperSettings:CreateColourPicker(self.settingsControl, 440, left, movingTop, "Timer Color")
     self.settingsControl.colorTimer:SetCallback("OnValueChanged", function(w, e, r, g, b, a) self.db.timerColorR, self.db.timerColorG, self.db.timerColorB = r, g, b; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - 30
 
@@ -457,9 +646,9 @@ function EMA_Cooldowns:SettingsCreate()
     EMAHelperSettings:CreateScrollList(self.settingsControl.memberList)
     movingTop = movingTop - self.settingsControl.memberList.listHeight - verticalSpacing
 
-    EMAHelperSettings:CreateHeading(self.settingsControl, "Cooldown Spells by Class", movingTop, false)
+    EMAHelperSettings:CreateHeading(self.settingsControl, "Cooldown Spells and Trinkets by Class", movingTop, false)
     movingTop = movingTop - headingHeight
-    self.settingsControl.dropdownClass = EMAHelperSettings:CreateDropdown(self.settingsControl, headingWidth, left, movingTop, "Select Class to Manage")
+    self.settingsControl.dropdownClass = EMAHelperSettings:CreateDropdown(self.settingsControl, 440, left, movingTop, "Select Class to Manage")
     self.settingsControl.dropdownClass:SetList({
         ["WARRIOR"] = "Warrior", ["PALADIN"] = "Paladin", ["HUNTER"] = "Hunter", ["ROGUE"] = "Rogue",
         ["PRIEST"] = "Priest", ["DEATHKNIGHT"] = "Death Knight", ["SHAMAN"] = "Shaman", ["MAGE"] = "Mage",
@@ -476,9 +665,9 @@ function EMA_Cooldowns:SettingsCreate()
     EMAHelperSettings:CreateScrollList(self.settingsControl.spellList)
     movingTop = movingTop - self.settingsControl.spellList.listHeight - verticalSpacing
     
-    local halfWidth = (headingWidth - 10) / 2
-    self.settingsControl.editBoxAddSpell = EMAHelperSettings:CreateEditBox(self.settingsControl, halfWidth, left, movingTop, "Spell Name or ID")
-    self.settingsControl.editBoxDuration = EMAHelperSettings:CreateEditBox(self.settingsControl, halfWidth - 70, left + halfWidth + 5, movingTop, "CD (sec)")
+    local halfEditWidth = (headingWidth - 10) / 2
+    self.settingsControl.editBoxAddSpell = EMAHelperSettings:CreateEditBox(self.settingsControl, halfEditWidth, left, movingTop, "Spell Name or ID")
+    self.settingsControl.editBoxDuration = EMAHelperSettings:CreateEditBox(self.settingsControl, halfEditWidth - 70, left + halfEditWidth + 5, movingTop, "CD (sec)")
     self.settingsControl.buttonAddSpell = EMAHelperSettings:CreateButton(self.settingsControl, 60, left + headingWidth - 60, movingTop, "Add", function() self:AddSpellToTrackedList() end)
     movingTop = movingTop - EMAHelperSettings:GetEditBoxHeight()
 
@@ -524,22 +713,28 @@ function EMA_Cooldowns:SettingsMemberListRowClick(rowNumber, columnNumber)
 end
 
 function EMA_Cooldowns:AddSpellToTrackedList()
-    local class = self.selectedClass
-    if not class then self:Print("Please select a class first."); return end
+    local classRaw = self.selectedClass
+    if not classRaw then self:Print("Please select a class first."); return end
+    local class = classRaw:upper()
     local rawSpell = self.settingsControl.editBoxAddSpell:GetText()
     local spellVal = strtrim(rawSpell or "")
     local duration = tonumber(self.settingsControl.editBoxDuration:GetText())
     if not spellVal or spellVal == "" or not duration then self:Print("Invalid Name/ID or Duration."); return end
-    local name, icon, spellID = self:GetSpellInfoRobust(spellVal)
-    if not name then self:Print("Could not find spell information for: " .. spellVal); return end
-    table.insert(self.db.trackedSpells[class], { name = name, id = tonumber(spellID) or 0, duration = duration, icon = icon or 134400 })
+    local name, icon, id, type = self:GetSpellOrItemInfoRobust(spellVal)
+    if not name then self:Print("Could not find spell/item information for: " .. spellVal); return end
+    
+    table.insert(self.db.trackedSpells[class], { name = name, id = tonumber(id) or 0, duration = duration, icon = icon or 134400, type = type })
+    self:Print(string.format("Added: %s (%ds)", name, duration))
+    
     self.settingsControl.editBoxAddSpell:SetText(""); self.settingsControl.editBoxDuration:SetText("")
     self:SettingsSpellListScrollRefresh(); self:PushSettingsToTeam(); self:SettingsRefresh()
 end
 
 function EMA_Cooldowns:SettingsSpellListScrollRefresh()
-    local class = self.selectedClass
-    local spells = class and self.db.trackedSpells[class] or {}
+    local classRaw = self.selectedClass
+    if not classRaw then return end
+    local class = classRaw:upper()
+    local spells = self.db.trackedSpells[class] or {}
     local rh = self.settingsControl.spellList.rowHeight
     FauxScrollFrame_Update(self.settingsControl.spellList.listScrollFrame, #spells, self.settingsControl.spellList.rowsToDisplay, rh)
     local offset = FauxScrollFrame_GetOffset(self.settingsControl.spellList.listScrollFrame)
@@ -567,11 +762,12 @@ function EMA_Cooldowns:SettingsSpellListScrollRefresh()
 end
 
 function EMA_Cooldowns:SettingsSpellListRowClick(rowNumber, columnNumber)
-    local class = self.selectedClass
-    if not class then return end
+    local classRaw = self.selectedClass
+    if not classRaw then return end
+    local class = classRaw:upper()
     local offset = FauxScrollFrame_GetOffset(self.settingsControl.spellList.listScrollFrame)
     local dataIndex = rowNumber + offset
-    local spells = self.db.trackedSpells[class]
+    local spells = self.db.trackedSpells[class] or {}
     if columnNumber == 1 then
         -- Multi-column logic simplified
         local x = GetCursorPosition() / UIParent:GetEffectiveScale()
@@ -600,6 +796,7 @@ function EMA_Cooldowns:SettingsRefresh()
         self.settingsControl.checkBoxShowBars:SetValue(db.showBars)
         self.settingsControl.checkBoxLockBars:SetValue(db.lockBars)
         self.settingsControl.checkBoxShowNames:SetValue(db.showNames)
+        self.settingsControl.checkBoxBreakUpBars:SetValue(db.breakUpBars)
         
         self.settingsControl.sliderScale:SetValue(db.barScale or 1.0)
         self.settingsControl.sliderAlpha:SetValue(db.barAlpha or 1.0)

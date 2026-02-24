@@ -2,6 +2,7 @@ local addonName, ns = ...
 -- Official EMA Module initialization
 local EMA_Cooldowns = LibStub("AceAddon-3.0"):NewAddon("EMA_Cooldowns", "Module-1.0", "AceConsole-3.0", "AceEvent-3.0", "AceTimer-3.0")
 ns.EMA_Cooldowns = EMA_Cooldowns
+EMA_Cooldowns.ns = ns
 
 EMA_Cooldowns.moduleName = "EMA_Cooldowns"
 EMA_Cooldowns.settingsDatabaseName = "EMA_CooldownsProfileDB"
@@ -64,6 +65,7 @@ EMA_Cooldowns.settings = {
         lockBars = false,
         barOrder = "RoleAsc",
         showNames = true,
+        barLayout = "Horizontal",
         -- Opacity
         runningAlpha = 0.3,
         readyAlpha = 1.0,
@@ -96,7 +98,7 @@ EMA_Cooldowns.settings = {
         trackedSpells = {
             ["WARRIOR"] = {}, ["PALADIN"] = {}, ["HUNTER"] = {}, ["ROGUE"] = {},
             ["PRIEST"] = {}, ["DEATHKNIGHT"] = {}, ["SHAMAN"] = {}, ["MAGE"] = {},
-            ["WARLOCK"] = {}, ["DRUID"] = {},
+            ["WARLOCK"] = {}, ["DRUID"] = {}, ["GLOBAL"] = {},
         },
         teamBarsPos = { point = "CENTER", x = 200, y = 0 },
     }
@@ -242,47 +244,54 @@ end
 
 function EMA_Cooldowns:GetSpellOrItemInfoRobust(search)
     if not search or search == "" then return nil end
-    local name, icon, id
+    local searchLower = search:lower()
     
-    -- Check Spell
-    if tonumber(search) then
-        name, _, icon, _, _, _, id = GetSpellInfo(tonumber(search))
-        if name then return name, icon, id, "spell" end
+    -- 1. Handle Links
+    local linkID = string.match(search, "spell:(%d+)")
+    if linkID then
+        local name, _, icon = GetSpellInfo(tonumber(linkID))
+        if name then return name, icon, tonumber(linkID), "spell" end
     end
+    linkID = string.match(search, "item:(%d+)")
+    if linkID then
+        local name, _, _, _, _, _, _, _, _, icon = GetItemInfo(tonumber(linkID))
+        if not name then
+            local _, _, _, _, iconInstant = GetItemInfoInstant(tonumber(linkID))
+            return tostring(linkID), iconInstant, tonumber(linkID), "item"
+        end
+        return name, icon, tonumber(linkID), "item"
+    end
+
+    -- 2. Direct ID Lookups
+    if tonumber(search) then
+        local id = tonumber(search)
+        local name, _, icon = GetSpellInfo(id)
+        if name then return name, icon, id, "spell" end
+        name, _, _, _, _, _, _, _, _, icon = GetItemInfo(id)
+        if name then return name, icon, id, "item" end
+        local _, _, _, _, iconInstant = GetItemInfoInstant(id)
+        if iconInstant then return "ID " .. id, iconInstant, id, "item" end
+    end
+
+    -- 3. Direct Name Lookups (requires cache)
+    local name, icon, id
     name, _, icon, _, _, _, id = GetSpellInfo(search)
     if name then return name, icon, id, "spell" end
-    
-    -- Check Item
-    if tonumber(search) then
-        name, _, _, _, _, _, _, _, _, icon = GetItemInfo(tonumber(search))
-        if not name then
-            -- Try instant info for uncached items
-            local _, _, _, _, itemTexture = GetItemInfoInstant(tonumber(search))
-            if itemTexture then
-                return tostring(search), itemTexture, tonumber(search), "item"
-            end
-        else
-            return name, icon, tonumber(search), "item"
-        end
-    end
     name, _, _, _, _, _, _, _, _, icon = GetItemInfo(search)
     if name then
         local _, link = GetItemInfo(search)
         local itemID = string.match(link or "", "item:(%d+)")
         return name, icon, tonumber(itemID) or 0, "item"
     end
-    
-    -- Check if it's a name but uncached - use Instant info to find it
-    local searchLower = search:lower()
-    if not tonumber(search) then
-        for i = 1, 100000 do
-            local n, _, _, _, iconInstant = GetItemInfoInstant(i)
-            if n and n:lower() == searchLower then
-                return n, iconInstant, i, "item"
-            end
+
+    -- 4. DEEP SCAN: Search for names in the full database (handles uncached items)
+    -- This is efficient as GetItemInfoInstant and GetSpellInfo are fast
+    for i = 1, 150000 do
+        local n, _, _, _, iconInstant = GetItemInfoInstant(i)
+        if n and n:lower() == searchLower then
+            return n, iconInstant, i, "item"
         end
     end
-
     for i = 1, 250000 do
         local n = GetSpellInfo(i)
         if n and n:lower() == searchLower then
@@ -290,6 +299,7 @@ function EMA_Cooldowns:GetSpellOrItemInfoRobust(search)
             return name, icon, id, "spell"
         end
     end
+    
     return nil
 end
 
@@ -327,14 +337,24 @@ function EMA_Cooldowns:ChatCommand(input)
 end
 
 function EMA_Cooldowns:TestCooldown()
-    local charKey = Ambiguate(self.characterName, "none"):lower()
-    local class, _ = EMAApi.GetClass(self.characterName)
-    local classKey = class:upper()
-    local tracked = self.db.trackedSpells[classKey]
-    local spellName = (tracked and tracked[1] and tracked[1].name) or "Test Spell"
-    self.activeCooldowns[charKey] = self.activeCooldowns[charKey] or {}
-    self.activeCooldowns[charKey][spellName] = { startTime = GetTime(), duration = 10 }
-    self:Print("Started 10s Test Cooldown.")
+    for index, characterName in EMAApi.TeamListOrdered() do
+        local isOnline = EMAApi.GetCharacterOnlineStatus(characterName)
+        if (isOnline == true or characterName == self.characterName) and self.db.enabledMembers[characterName] ~= false then
+            local class, _ = EMAApi.GetClass(characterName)
+            if class then
+                local classKey = class:upper()
+                local tracked = self.db.trackedSpells[classKey]
+                if tracked then
+                    local charKey = Ambiguate(characterName, "none"):lower()
+                    self.activeCooldowns[charKey] = self.activeCooldowns[charKey] or {}
+                    for _, spellInfo in ipairs(tracked) do
+                        self.activeCooldowns[charKey][spellInfo.name] = { startTime = GetTime(), duration = 10 }
+                    end
+                end
+            end
+        end
+    end
+    self:Print("Started 10s Test Cooldown on all tracked icons.")
     ns.UI:RefreshBars()
 end
 
@@ -428,9 +448,10 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
             
             -- Build potential lists to check
             local listsToCheck = {}
+            if self.db.trackedSpells["GLOBAL"] then table.insert(listsToCheck, self.db.trackedSpells["GLOBAL"]) end
             if class then
                 local classKey = class:upper()
-                table.insert(listsToCheck, self.db.trackedSpells[classKey])
+                if self.db.trackedSpells[classKey] then table.insert(listsToCheck, self.db.trackedSpells[classKey]) end
             end
 
             for _, spellList in ipairs(listsToCheck) do
@@ -505,7 +526,11 @@ function EMA_Cooldowns:SettingsCreate()
     self.settingsControl = {}
     self.settingsControlClass = {}
     local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
-    EMAHelperSettings:CreateSettings(self.settingsControlClass, "Buffs & Cooldowns", "Buffs & Cooldowns", function() end, "Interface\\AddOns\\EMA\\Media\\TeamCore.tga", 6)
+    EMAHelperSettings:CreateSettings(self.settingsControlClass, "Buffs & Cooldowns", "Buffs & Cooldowns", function() 
+        self:PushSettingsToTeam()
+        local EMA_Buffs = LibStub("AceAddon-3.0"):GetAddon("EMA_Buffs", true)
+        if EMA_Buffs then EMA_Buffs:PushSettingsToTeam() end
+    end, "Interface\\AddOns\\EMA\\Media\\TeamCore.tga", 6)
     EMAHelperSettings:CreateSettings(self.settingsControl, "Cooldowns", "Buffs & Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11)
     
     local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()
@@ -519,12 +544,16 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - headingHeight
     self.settingsControl.checkBoxShowBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Show Cooldown Bars", function(w, e, v) self.db.showBars = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
-    self.settingsControl.checkBoxLockBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Lock Bars", function(w, e, v) self.db.lockBars = v; self:SettingsRefresh() end)
+    self.settingsControl.checkBoxLockBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Lock Bars", function(w, e, v) self.db.lockBars = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
     self.settingsControl.checkBoxShowNames = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Show Character Names", function(w, e, v) self.db.showNames = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
     self.settingsControl.checkBoxBreakUpBars = EMAHelperSettings:CreateCheckBox(self.settingsControl, headingWidth, left, movingTop, "Ungrouped Bars (Independent Movement)", function(w, e, v) self.db.breakUpBars = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
     movingTop = movingTop - checkBoxHeight
+    self.settingsControl.dropdownLayout = EMAHelperSettings:CreateDropdown(self.settingsControl, 440, left, movingTop, "Bar Orientation")
+    self.settingsControl.dropdownLayout:SetList({ ["Horizontal"] = "Horizontal (Icons in a row)", ["Vertical"] = "Vertical (Icons in a column)" })
+    self.settingsControl.dropdownLayout:SetCallback("OnValueChanged", function(w, e, v) self.db.barLayout = v; ns.UI:RefreshBars(); self:SettingsRefresh() end)
+    movingTop = movingTop - dropdownHeight - verticalSpacing
     self.settingsControl.buttonResetPositions = EMAHelperSettings:CreateButton(self.settingsControl, headingWidth, left, movingTop, "Reset All Independent Bar Positions", function() 
         self.db.individualBarPositions = {}
         if ns.UI and ns.UI.teamBars then
@@ -652,7 +681,7 @@ function EMA_Cooldowns:SettingsCreate()
     self.settingsControl.dropdownClass:SetList({
         ["WARRIOR"] = "Warrior", ["PALADIN"] = "Paladin", ["HUNTER"] = "Hunter", ["ROGUE"] = "Rogue",
         ["PRIEST"] = "Priest", ["DEATHKNIGHT"] = "Death Knight", ["SHAMAN"] = "Shaman", ["MAGE"] = "Mage",
-        ["WARLOCK"] = "Warlock", ["DRUID"] = "Druid"
+        ["WARLOCK"] = "Warlock", ["DRUID"] = "Druid", ["GLOBAL"] = "Global (All Classes)"
     })
     self.settingsControl.dropdownClass:SetCallback("OnValueChanged", function(w, e, v) self.selectedClass = v; self:SettingsSpellListScrollRefresh(); self:SettingsRefresh() end)
     movingTop = movingTop - dropdownHeight - verticalSpacing
@@ -666,7 +695,29 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - self.settingsControl.spellList.listHeight - verticalSpacing
     
     local halfEditWidth = (headingWidth - 10) / 2
-    self.settingsControl.editBoxAddSpell = EMAHelperSettings:CreateEditBox(self.settingsControl, halfEditWidth, left, movingTop, "Spell Name or ID")
+    self.settingsControl.editBoxAddSpell = EMAHelperSettings:CreateEditBox(self.settingsControl, halfEditWidth, left, movingTop, "Spell Name or ID (Drag items here)")
+    
+    -- Add Drag and Drop support
+    local eb = self.settingsControl.editBoxAddSpell.editbox
+    eb:SetScript("OnReceiveDrag", function(obj)
+        local type, id, info = GetCursorInfo()
+        if type == "spell" then
+            local name = GetSpellInfo(id, info)
+            if name then obj:SetText(name) end
+            ClearCursor()
+        elseif type == "item" then
+            local name = GetItemInfo(id)
+            if name then obj:SetText(name) else obj:SetText(tostring(id)) end
+            ClearCursor()
+        end
+    end)
+    eb:HookScript("OnMouseUp", function(obj)
+        local type, id, info = GetCursorInfo()
+        if type == "spell" or type == "item" then
+            eb:GetScript("OnReceiveDrag")(obj)
+        end
+    end)
+
     self.settingsControl.editBoxDuration = EMAHelperSettings:CreateEditBox(self.settingsControl, halfEditWidth - 70, left + halfEditWidth + 5, movingTop, "CD (sec)")
     self.settingsControl.buttonAddSpell = EMAHelperSettings:CreateButton(self.settingsControl, 60, left + headingWidth - 60, movingTop, "Add", function() self:AddSpellToTrackedList() end)
     movingTop = movingTop - EMAHelperSettings:GetEditBoxHeight()
@@ -719,13 +770,59 @@ function EMA_Cooldowns:AddSpellToTrackedList()
     local rawSpell = self.settingsControl.editBoxAddSpell:GetText()
     local spellVal = strtrim(rawSpell or "")
     local duration = tonumber(self.settingsControl.editBoxDuration:GetText())
-    if not spellVal or spellVal == "" or not duration then self:Print("Invalid Name/ID or Duration."); return end
+    
+    self:Print("DEBUG: Trying to add: " .. tostring(spellVal) .. " for class: " .. tostring(class))
+
+    if not spellVal or spellVal == "" then 
+        self:Print("Error: Please enter a name, ID, or Link.")
+        return 
+    end
+    if not duration then
+        self:Print("Error: Please enter a duration in seconds (e.g. 60).")
+        return
+    end
+    
     local name, icon, id, type = self:GetSpellOrItemInfoRobust(spellVal)
-    if not name then self:Print("Could not find spell/item information for: " .. spellVal); return end
+    self:Print("DEBUG: Robust Lookup Result: " .. tostring(name) .. " | " .. tostring(id) .. " | " .. tostring(type))
     
-    table.insert(self.db.trackedSpells[class], { name = name, id = tonumber(id) or 0, duration = duration, icon = icon or 134400, type = type })
-    self:Print(string.format("Added: %s (%ds)", name, duration))
+    -- Fallback for raw IDs if name lookup failed
+    if not name and tonumber(spellVal) then
+        id = tonumber(spellVal)
+        name = "ID " .. id
+        icon = 134400
+        type = "spell"
+        self:Print("DEBUG: Using Raw ID Fallback")
+    end
+
+    if not name then 
+        self:Print("Could not find information for: " .. spellVal .. ". Try using an ID or Link.")
+        return 
+    end
     
+    local matchName = name
+    if type == "item" then
+        local itemSpell = GetItemSpell(id)
+        if itemSpell then
+            matchName = itemSpell
+            self:Print("DEBUG: Item Spell Found: " .. tostring(matchName))
+        end
+    end
+
+    if not self.db.trackedSpells[class] then 
+        self:Print("DEBUG: Class list did not exist, creating it.")
+        self.db.trackedSpells[class] = {} 
+    end
+    
+    table.insert(self.db.trackedSpells[class], { 
+        name = name, 
+        matchName = matchName, 
+        id = tonumber(id) or 0, 
+        duration = duration, 
+        icon = icon or 134400, 
+        type = type 
+    })
+    
+    self:Print(string.format("Added to %s: %s (%ds)", class, name, duration))
     self.settingsControl.editBoxAddSpell:SetText(""); self.settingsControl.editBoxDuration:SetText("")
     self:SettingsSpellListScrollRefresh(); self:PushSettingsToTeam(); self:SettingsRefresh()
 end
@@ -797,6 +894,7 @@ function EMA_Cooldowns:SettingsRefresh()
         self.settingsControl.checkBoxLockBars:SetValue(db.lockBars)
         self.settingsControl.checkBoxShowNames:SetValue(db.showNames)
         self.settingsControl.checkBoxBreakUpBars:SetValue(db.breakUpBars)
+        self.settingsControl.dropdownLayout:SetValue(db.barLayout or "Horizontal")
         
         self.settingsControl.sliderScale:SetValue(db.barScale or 1.0)
         self.settingsControl.sliderAlpha:SetValue(db.barAlpha or 1.0)

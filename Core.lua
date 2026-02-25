@@ -524,13 +524,8 @@ end
 
 function EMA_Cooldowns:SettingsCreate()
     self.settingsControl = {}
-    self.settingsControlClass = {}
     local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
-    EMAHelperSettings:CreateSettings(self.settingsControlClass, "Buffs & Cooldowns", "Buffs & Cooldowns", function() 
-        self:PushSettingsToTeam()
-        local EMA_Buffs = LibStub("AceAddon-3.0"):GetAddon("EMA_Buffs", true)
-        if EMA_Buffs then EMA_Buffs:PushSettingsToTeam() end
-    end, "Interface\\AddOns\\EMA\\Media\\TeamCore.tga", 6)
+    
     EMAHelperSettings:CreateSettings(self.settingsControl, "Cooldowns", "Buffs & Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11)
     
     local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()

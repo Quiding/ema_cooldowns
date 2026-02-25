@@ -681,7 +681,7 @@ function EMA_Cooldowns:SettingsCreate()
     self.settingsControl.dropdownClass:SetList({
         ["WARRIOR"] = "Warrior", ["PALADIN"] = "Paladin", ["HUNTER"] = "Hunter", ["ROGUE"] = "Rogue",
         ["PRIEST"] = "Priest", ["DEATHKNIGHT"] = "Death Knight", ["SHAMAN"] = "Shaman", ["MAGE"] = "Mage",
-        ["WARLOCK"] = "Warlock", ["DRUID"] = "Druid", ["GLOBAL"] = "Global (All Classes)"
+        ["WARLOCK"] = "Warlock", ["DRUID"] = "Druid"
     })
     self.settingsControl.dropdownClass:SetCallback("OnValueChanged", function(w, e, v) self.selectedClass = v; self:SettingsSpellListScrollRefresh(); self:SettingsRefresh() end)
     movingTop = movingTop - dropdownHeight - verticalSpacing

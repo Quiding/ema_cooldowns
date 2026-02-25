@@ -12,9 +12,10 @@ Is this AI slop? probably, but it seems to work
 
 *   **Persistent Cooldown Tracking:** View all tracked spells for your entire team in one compact interface. Available spells are shown semi-transparently, while those on cooldown light up with circular animations and numeric timers.
 *   **Independent UI Styling:** Fully customize your interface with separate background, border, and color selections for the **Whole UI Frame** and the **Individual Character Bars**.
-*   **Customizable Spell Lists:** Easily add, remove, and reorder spells for every class in the game to match your team's needs.
+*   **Customizable Tracking Lists:** Easily add, remove, and reorder **spells, trinkets, and consumables** for every class in the game.
+*   **Team-Wide Support:** Automatically detects and tracks abilities across your entire team using high-precision combat log monitoring.
 *   **Instant Visual Feedback:** High-precision timers and circular cooldown progress ensure you always know exactly when your team's abilities are ready.
-*   **Team Synchronization:** Push your spell lists and layout settings from the master to the entire team with a single click.
+*   **Team Synchronization:** Push your tracking lists and layout settings from the master to the entire team with a single click.
 
 ## Installation
 
@@ -25,6 +26,7 @@ Is this AI slop? probably, but it seems to work
 ## Usage
 
 *   Open the EMA configuration menu and navigate to **Class > Cooldowns**.
-*   Use **Select Class to Manage** to customize spells for specific classes.
+*   Use **Select Class to Manage** to customize tracking for specific classes.
+*   **Tracking Trinkets & Consumables:** You can add trinkets (e.g., "Earthstrike") or consumables (e.g., "Super Mana Potion") to any class list by typing their exact name or Item ID into the "Add Spell Name/ID" box.
 *   Adjust the **Overall Scale**, **Alpha**, and **Spacing** to fit your UI layout.
 *   Use the command `/ecd test` to verify your bar position and visibility.

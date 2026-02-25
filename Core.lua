@@ -951,7 +951,7 @@ function EMA_Cooldowns:ImportExportSettingsCreate()
     self.settingsControlImportExport = {}
     local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
     
-    EMAHelperSettings:CreateSettings(self.settingsControlImportExport, "Import / Export", "Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 13)
+    EMAHelperSettings:CreateSettings(self.settingsControlImportExport, "Cooldowns: Import / Export", "Buffs & Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11.1)
     
     local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()
     local headingHeight, headingWidth = EMAHelperSettings:HeadingHeight(), EMAHelperSettings:HeadingWidth(true)

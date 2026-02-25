@@ -723,6 +723,7 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - EMAHelperSettings:GetEditBoxHeight()
 
     self:EMAModuleInitialize(self.settingsControl.widgetSettings.frame)
+    self:ImportExportSettingsCreate()
     self.settingsControl.widgetSettings.content:SetHeight(-movingTop + 20)
 end
 
@@ -946,3 +947,96 @@ function EMA_Cooldowns:OnEMAProfileChanged()
     ns.UI:RefreshBars()
 end
 function EMA_Cooldowns:BeforeEMAProfileChanged() end
+
+-- -----------------------------------------------------------------------
+-- IMPORT / EXPORT
+-- -----------------------------------------------------------------------
+
+function EMA_Cooldowns:ImportExportSettingsCreate()
+    self.settingsControlImportExport = {}
+    local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
+    
+    EMAHelperSettings:CreateSettings(self.settingsControlImportExport, "Import / Export", "Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 13)
+    
+    local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()
+    local headingHeight, headingWidth = EMAHelperSettings:HeadingHeight(), EMAHelperSettings:HeadingWidth(true)
+    local movingTop = top
+    
+    EMAHelperSettings:CreateHeading(self.settingsControlImportExport, "Data Import / Export", movingTop, false)
+    movingTop = movingTop - headingHeight - 10
+
+    self.settingsControlImportExport.labelInfo = EMAHelperSettings:CreateLabel(self.settingsControlImportExport, headingWidth, left, movingTop, "Use the boxes below to export or import configuration strings.")
+    movingTop = movingTop - 30
+
+    -- 1. Spell List
+    EMAHelperSettings:CreateHeading(self.settingsControlImportExport, "1. Tracked Spells List", movingTop, false)
+    movingTop = movingTop - headingHeight - 5
+    
+    self.settingsControlImportExport.editBoxSpells = EMAHelperSettings:CreateMultiEditBox(self.settingsControlImportExport, headingWidth, left, movingTop, "Spell List Data (Class-specific tracked spells)", 6)
+    movingTop = movingTop - 120
+    
+    self.settingsControlImportExport.buttonExportSpells = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left, movingTop, "Export Spell List", function()
+        local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+        local str = LibAceSerializer:Serialize(self.db.trackedSpells)
+        self.settingsControlImportExport.editBoxSpells.editBox:SetText(str)
+        self.settingsControlImportExport.editBoxSpells.editBox:HighlightText()
+        self.settingsControlImportExport.editBoxSpells.editBox:SetFocus()
+    end)
+    
+    self.settingsControlImportExport.buttonImportSpells = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left + headingWidth/2 + 5, movingTop, "Import Spell List", function()
+        local str = self.settingsControlImportExport.editBoxSpells.editBox:GetText()
+        if str and str ~= "" then
+            local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+            local success, data = LibAceSerializer:Deserialize(str)
+            if success and type(data) == "table" then
+                self.db.trackedSpells = data
+                self:Print("Spell list imported successfully!")
+                self:SettingsRefresh()
+            else
+                self:Print("Error: Invalid spell list import string.")
+            end
+        end
+    end)
+    movingTop = movingTop - 40
+
+    -- 2. Settings + Positions
+    EMAHelperSettings:CreateHeading(self.settingsControlImportExport, "2. Settings & Positions", movingTop, false)
+    movingTop = movingTop - headingHeight - 5
+    
+    self.settingsControlImportExport.editBoxSettings = EMAHelperSettings:CreateMultiEditBox(self.settingsControlImportExport, headingWidth, left, movingTop, "General Settings Data (Layout, Scale, Positions, etc.)", 6)
+    movingTop = movingTop - 120
+    
+    self.settingsControlImportExport.buttonExportSettings = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left, movingTop, "Export Settings", function()
+        local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+        local EMAUtilities = LibStub:GetLibrary("EbonyUtilities-1.0")
+        local settings = EMAUtilities:CopyTable(self.db)
+        settings.trackedSpells = nil -- Exclude spells
+        local str = LibAceSerializer:Serialize(settings)
+        self.settingsControlImportExport.editBoxSettings.editBox:SetText(str)
+        self.settingsControlImportExport.editBoxSettings.editBox:HighlightText()
+        self.settingsControlImportExport.editBoxSettings.editBox:SetFocus()
+    end)
+    
+    self.settingsControlImportExport.buttonImportSettings = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left + headingWidth/2 + 5, movingTop, "Import Settings", function()
+        local str = self.settingsControlImportExport.editBoxSettings.editBox:GetText()
+        if str and str ~= "" then
+            local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+            local success, data = LibAceSerializer:Deserialize(str)
+            if success and type(data) == "table" then
+                local trackedSpells = self.db.trackedSpells -- Keep current spells
+                for k, v in pairs(data) do
+                    self.db[k] = v
+                end
+                self.db.trackedSpells = trackedSpells -- Restore spells
+                self:Print("Settings and positions imported successfully!")
+                ns.UI:RefreshBars()
+                self:SettingsRefresh()
+            else
+                self:Print("Error: Invalid settings import string.")
+            end
+        end
+    end)
+    movingTop = movingTop - 40
+
+    self.settingsControlImportExport.widgetSettings.content:SetHeight(-movingTop + 20)
+end

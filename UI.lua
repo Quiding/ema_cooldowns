@@ -126,16 +126,16 @@ local function CreateCooldownBar(characterName, parent)
             if shouldGlow then
                 if db.glowAnimated and LBG then b.glow:Hide(); LBG.ShowOverlayGlow(b, { color = { db.glowColorR or 0, db.glowColorG or 1, db.glowColorB or 1, db.glowColorA or 1 } })
                 else if LBG then LBG.HideOverlayGlow(b) end; b.glow:SetVertexColor(db.glowColorR or 0, db.glowColorG or 1, db.glowColorB or 1, db.glowColorA or 1); b.glow:Show() end
-                b.icon:SetAlpha(readyAlpha); b.cooldown:Hide(); b.timerText:Hide()
+                b:SetAlpha(readyAlpha); b.icon:SetAlpha(1.0); b.cooldown:Hide(); b.timerText:Hide()
             elseif activeData and not activeData.pendingBuff then
                 b.glow:Hide(); if LBG then LBG.HideOverlayGlow(b) end
                 local remaining = activeData.startTime + activeData.duration - GetTime()
                 if remaining > 0 then
-                    b.icon:SetAlpha(runningAlpha); b.cooldown:SetCooldown(activeData.startTime, activeData.duration); b.cooldown:Show()
+                    b:SetAlpha(runningAlpha); b.icon:SetAlpha(1.0); b.cooldown:SetCooldown(activeData.startTime, activeData.duration); b.cooldown:Show()
                     if db.showTimers then ApplyFontStyle(b.timerText); b.timerText:SetFont(SharedMedia:Fetch("font", db.fontStyle), db.timerFontSize, "OUTLINE"); b.timerText:SetTextColor(db.timerColorR or 1, db.timerColorG or 1, db.timerColorB or 1); b.timerText:SetText(math.floor(remaining)); b.timerText:Show()
                     else b.timerText:Hide() end
-                else EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name] = nil; b.icon:SetAlpha(readyAlpha); b.cooldown:Hide(); b.timerText:Hide() end
-            else b.glow:Hide(); if LBG then LBG.HideOverlayGlow(b) end; b.icon:SetAlpha(readyAlpha); b.cooldown:Hide(); b.timerText:Hide() end
+                else EMA_Cooldowns.activeCooldowns[charKey][spellInfo.name] = nil; b:SetAlpha(readyAlpha); b.icon:SetAlpha(1.0); b.cooldown:Hide(); b.timerText:Hide() end
+            else b.glow:Hide(); if LBG then LBG.HideOverlayGlow(b) end; b:SetAlpha(readyAlpha); b.icon:SetAlpha(1.0); b.cooldown:Hide(); b.timerText:Hide() end
             b:Show()
         end
 

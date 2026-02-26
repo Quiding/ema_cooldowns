@@ -7,7 +7,8 @@ Looking for other team-wide tracking? Check out [EMA Buffs](https://github.com/Q
 **Note:** This addon likely requires your team to be in the same guild and utilize **guild communications** for settings synchronization, however, all timers are tracked via the **combat log** for high-precision updates.
 
 ![ezgif-8051a8e182b8254c](https://github.com/user-attachments/assets/ac3fafb8-0d10-4d11-8e47-2f792548f093)
-![ezgif-8051a8e182b8254c](https://github.com/user-attachments/assets/6a279704-7f8c-4fba-90df-19e8d3e5983d)
+![ezgif-8e7cfb7fce864ab7](https://github.com/user-attachments/assets/a4f9d473-b307-4ea0-8226-93c3c6987f4f)
+
 
 
 **Disclaimer:** These addons are early-stage Gemini-generated prototypes and have not undergone extensive bug testing. Please use with caution and report any issues you find.

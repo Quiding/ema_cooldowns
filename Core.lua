@@ -231,7 +231,8 @@ function EMA_Cooldowns:OnInitialize()
     PatchSharedMediaWidgets()
     self.completeDatabase = LibStub("AceDB-3.0"):New(self.settingsDatabaseName, self.settings)
     self.db = self.completeDatabase.profile
-    self.characterName = UnitName("player")
+    local realm = GetRealmName():gsub("%s+", "")
+    self.characterName = UnitName("player").."-"..realm
     self:SettingsCreate()
     self:RegisterChatCommand("ecd", "ChatCommand")
     self:RegisterChatCommand("ema-cooldowns", "ChatCommand")
@@ -497,13 +498,19 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
     end
 end
 
-function EMA_Cooldowns:PushSettingsToTeam() self:EMASendSettings() end
+function EMA_Cooldowns:PushSettingsToTeam() self:EMASendSettings(); self:EMASendCommandToTeam("EMACDPushAll") end
 
 -- REQUIRED BY EMA CORE FOR SYNC
 function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
     if characterName ~= self.characterName then
         for k, v in pairs(settings) do
-            self.db[k] = v
+            if k ~= "enabledMembers" and k ~= "individualBarPositions" and k ~= "teamBarsPos" then
+                if type(v) == "table" then
+                    self.db[k] = EMAUtilities:CopyTable(v)
+                else
+                    self.db[k] = v
+                end
+            end
         end
         self:SettingsRefresh()
         ns.UI:RefreshBars()
@@ -512,7 +519,9 @@ function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
 end
 
 function EMA_Cooldowns:EMAOnCommandReceived(sender, commandName, ...)
-    -- Handle commands if needed
+    if commandName == "EMACDPushAll" then
+        ns.UI:RefreshBars()
+    end
 end
 
 function EMA_Cooldowns:BeforeEMAProfileChanged() end
@@ -524,13 +533,8 @@ end
 
 function EMA_Cooldowns:SettingsCreate()
     self.settingsControl = {}
-    self.settingsControlClass = {}
     local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
-    EMAHelperSettings:CreateSettings(self.settingsControlClass, "Buffs & Cooldowns", "Buffs & Cooldowns", function() 
-        self:PushSettingsToTeam()
-        local EMA_Buffs = LibStub("AceAddon-3.0"):GetAddon("EMA_Buffs", true)
-        if EMA_Buffs then EMA_Buffs:PushSettingsToTeam() end
-    end, "Interface\\AddOns\\EMA\\Media\\TeamCore.tga", 6)
+    
     EMAHelperSettings:CreateSettings(self.settingsControl, "Cooldowns", "Buffs & Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11)
     
     local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()
@@ -723,6 +727,7 @@ function EMA_Cooldowns:SettingsCreate()
     movingTop = movingTop - EMAHelperSettings:GetEditBoxHeight()
 
     self:EMAModuleInitialize(self.settingsControl.widgetSettings.frame)
+    self:ImportExportSettingsCreate()
     self.settingsControl.widgetSettings.content:SetHeight(-movingTop + 20)
 end
 
@@ -771,8 +776,6 @@ function EMA_Cooldowns:AddSpellToTrackedList()
     local spellVal = strtrim(rawSpell or "")
     local duration = tonumber(self.settingsControl.editBoxDuration:GetText())
     
-    self:Print("DEBUG: Trying to add: " .. tostring(spellVal) .. " for class: " .. tostring(class))
-
     if not spellVal or spellVal == "" then 
         self:Print("Error: Please enter a name, ID, or Link.")
         return 
@@ -783,7 +786,6 @@ function EMA_Cooldowns:AddSpellToTrackedList()
     end
     
     local name, icon, id, type = self:GetSpellOrItemInfoRobust(spellVal)
-    self:Print("DEBUG: Robust Lookup Result: " .. tostring(name) .. " | " .. tostring(id) .. " | " .. tostring(type))
     
     -- Fallback for raw IDs if name lookup failed
     if not name and tonumber(spellVal) then
@@ -791,7 +793,6 @@ function EMA_Cooldowns:AddSpellToTrackedList()
         name = "ID " .. id
         icon = 134400
         type = "spell"
-        self:Print("DEBUG: Using Raw ID Fallback")
     end
 
     if not name then 
@@ -804,12 +805,10 @@ function EMA_Cooldowns:AddSpellToTrackedList()
         local itemSpell = GetItemSpell(id)
         if itemSpell then
             matchName = itemSpell
-            self:Print("DEBUG: Item Spell Found: " .. tostring(matchName))
         end
     end
 
     if not self.db.trackedSpells[class] then 
-        self:Print("DEBUG: Class list did not exist, creating it.")
         self.db.trackedSpells[class] = {} 
     end
     
@@ -851,7 +850,7 @@ function EMA_Cooldowns:SettingsSpellListScrollRefresh()
             row.columns[2].textString:SetText("")
             row.columns[3].textString:SetText(spell.name)
             row.columns[4].textString:SetText(spell.duration .. "s")
-            row.columns[5].textString:SetText("Remove")
+            row.columns[5].textString:SetText("|cffff0000Remove|r")
             row.dataIndex = dataIndex
             row:Show()
         else row:Hide() end
@@ -946,3 +945,105 @@ function EMA_Cooldowns:OnEMAProfileChanged()
     ns.UI:RefreshBars()
 end
 function EMA_Cooldowns:BeforeEMAProfileChanged() end
+
+-- -----------------------------------------------------------------------
+-- IMPORT / EXPORT
+-- -----------------------------------------------------------------------
+
+function EMA_Cooldowns:ImportExportSettingsCreate()
+    self.settingsControlImportExport = {}
+    local EMAHelperSettings = LibStub("EMAHelperSettings-1.0")
+    
+    EMAHelperSettings:CreateSettings(self.settingsControlImportExport, "Cooldowns: Import / Export", "Buffs & Cooldowns", function() self:PushSettingsToTeam() end, "Interface\\AddOns\\EMA\\Media\\SettingsIcon.tga", 11.1)
+    
+    local top, left = EMAHelperSettings:TopOfSettings(), EMAHelperSettings:LeftOfSettings()
+    local headingHeight, headingWidth = EMAHelperSettings:HeadingHeight(), EMAHelperSettings:HeadingWidth(true)
+    local movingTop = top
+    
+    EMAHelperSettings:CreateHeading(self.settingsControlImportExport, "Data Import / Export", movingTop, false)
+    movingTop = movingTop - headingHeight - 10
+
+    self.settingsControlImportExport.labelInfo = EMAHelperSettings:CreateLabel(self.settingsControlImportExport, headingWidth, left, movingTop, "Use the boxes below to export or import configuration strings.")
+    movingTop = movingTop - 30
+
+    -- 1. Spell List
+    EMAHelperSettings:CreateHeading(self.settingsControlImportExport, "1. Tracked Spells List", movingTop, false)
+    movingTop = movingTop - headingHeight - 5
+    
+    self.settingsControlImportExport.editBoxSpells = EMAHelperSettings:CreateMultiEditBox(self.settingsControlImportExport, headingWidth, left, movingTop, "Spell List Data (Class-specific tracked spells)", 6)
+    movingTop = movingTop - 120
+    
+    self.settingsControlImportExport.buttonExportSpells = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left, movingTop, "Export Spell List", function()
+        local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+        local str = LibAceSerializer:Serialize(self.db.trackedSpells)
+        self.settingsControlImportExport.editBoxSpells.editBox:SetText(str)
+        self.settingsControlImportExport.editBoxSpells.editBox:HighlightText()
+        self.settingsControlImportExport.editBoxSpells.editBox:SetFocus()
+    end)
+    
+    self.settingsControlImportExport.buttonImportSpells = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left + headingWidth/2 + 5, movingTop, "Import Spell List", function()
+        local str = self.settingsControlImportExport.editBoxSpells.editBox:GetText()
+        if str and str ~= "" then
+            local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+            local success, data = LibAceSerializer:Deserialize(str)
+            if success and type(data) == "table" then
+                self.db.trackedSpells = data
+                self:Print("Spell list imported successfully!")
+                self:SettingsRefresh()
+            else
+                self:Print("Error: Invalid spell list import string.")
+            end
+        end
+    end)
+    movingTop = movingTop - 40
+
+    -- 2. Settings + Positions
+    EMAHelperSettings:CreateHeading(self.settingsControlImportExport, "2. Settings & Positions", movingTop, false)
+    movingTop = movingTop - headingHeight - 5
+    
+    self.settingsControlImportExport.editBoxSettings = EMAHelperSettings:CreateMultiEditBox(self.settingsControlImportExport, headingWidth, left, movingTop, "General Settings Data (Layout, Scale, Positions, etc.)", 6)
+    movingTop = movingTop - 120
+    
+    self.settingsControlImportExport.buttonExportSettings = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left, movingTop, "Export Settings", function()
+        local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+        local EMAUtilities = LibStub:GetLibrary("EbonyUtilities-1.0")
+        local settings = EMAUtilities:CopyTable(self.db)
+        settings.trackedSpells = nil -- Exclude spells
+        settings.enabledMembers = nil -- Exclude character specific
+        settings.individualBarPositions = nil -- Exclude character specific
+        settings.teamBarsPos = nil -- Exclude character specific
+        local str = LibAceSerializer:Serialize(settings)
+        self.settingsControlImportExport.editBoxSettings.editBox:SetText(str)
+        self.settingsControlImportExport.editBoxSettings.editBox:HighlightText()
+        self.settingsControlImportExport.editBoxSettings.editBox:SetFocus()
+    end)
+    
+    self.settingsControlImportExport.buttonImportSettings = EMAHelperSettings:CreateButton(self.settingsControlImportExport, headingWidth/2 - 5, left + headingWidth/2 + 5, movingTop, "Import Settings", function()
+        local str = self.settingsControlImportExport.editBoxSettings.editBox:GetText()
+        if str and str ~= "" then
+            local LibAceSerializer = LibStub:GetLibrary("AceSerializer-3.0")
+            local success, data = LibAceSerializer:Deserialize(str)
+            if success and type(data) == "table" then
+                local trackedSpells = self.db.trackedSpells -- Keep current spells
+                local enabledMembers = self.db.enabledMembers
+                local individualBarPositions = self.db.individualBarPositions
+                local teamBarsPos = self.db.teamBarsPos
+                for k, v in pairs(data) do
+                    self.db[k] = v
+                end
+                self.db.trackedSpells = trackedSpells -- Restore spells
+                self.db.enabledMembers = enabledMembers
+                self.db.individualBarPositions = individualBarPositions
+                self.db.teamBarsPos = teamBarsPos
+                self:Print("Settings and positions imported successfully!")
+                ns.UI:RefreshBars()
+                self:SettingsRefresh()
+            else
+                self:Print("Error: Invalid settings import string.")
+            end
+        end
+    end)
+    movingTop = movingTop - 40
+
+    self.settingsControlImportExport.widgetSettings.content:SetHeight(-movingTop + 20)
+end

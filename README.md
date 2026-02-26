@@ -7,6 +7,7 @@ Looking for other team-wide tracking? Check out [EMA Buffs](https://github.com/Q
 **Note:** This addon likely requires your team to be in the same guild and utilize **guild communications** for settings synchronization, however, all timers are tracked via the **combat log** for high-precision updates.
 
 ![ezgif-8051a8e182b8254c](https://github.com/user-attachments/assets/ac3fafb8-0d10-4d11-8e47-2f792548f093)
+![ezgif-8051a8e182b8254c](https://github.com/user-attachments/assets/6a279704-7f8c-4fba-90df-19e8d3e5983d)
 
 
 **Disclaimer:** These addons are early-stage Gemini-generated prototypes and have not undergone extensive bug testing. Please use with caution and report any issues you find.
@@ -33,3 +34,10 @@ Looking for other team-wide tracking? Check out [EMA Buffs](https://github.com/Q
 *   **Tracking Trinkets & Consumables:** You can add trinkets (e.g., "Earthstrike") or consumables (e.g., "Super Mana Potion") to any class list by typing their exact name or Item ID into the "Add Spell Name/ID" box.
 *   Adjust the **Overall Scale**, **Alpha**, and **Spacing** to fit your UI layout.
 *   Use the command `/ecd test` to verify your bar position and visibility.
+
+
+## More Images of settings
+<img width="704" height="664" alt="image" src="https://github.com/user-attachments/assets/a27b0583-f746-4f81-bbc4-f6df86c9f514" />
+<img width="703" height="731" alt="image" src="https://github.com/user-attachments/assets/aa85bd50-7706-46e1-a0d3-7b61bba1039c" />
+<img width="713" height="732" alt="image" src="https://github.com/user-attachments/assets/24971a79-b9d9-4264-bd74-6fc273973abd" />
+

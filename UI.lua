@@ -52,7 +52,6 @@ local function CreateCooldownBar(characterName, parent)
     f.extraWidth, f.leftExtraWidth, f.extraHeight, f.topExtraHeight, f.topExtraWidth, f.bottomExtraWidth = 0,0,0,0,0,0
 
     f.nameLabel = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    f.nameLabel:SetText(Ambiguate(characterName, "short"))
 
     f.icons = {}
 
@@ -139,6 +138,7 @@ local function CreateCooldownBar(characterName, parent)
             b:Show()
         end
 
+        self.nameLabel:SetText(Ambiguate(self.characterName, "short"))
         ApplyFontStyle(self.nameLabel)
         local baseIconsWidth = (activeCount > 0) and ((size * activeCount) + (margin * math.max(0, activeCount - 1))) or 0
         local baseIconsHeight = (activeCount > 0) and ((size * activeCount) + (margin * math.max(0, activeCount - 1))) or 0

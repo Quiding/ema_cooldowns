@@ -4,6 +4,8 @@ A Gemini-generated plugin for **EMA (Ebony's MultiBoxing Assistant)** [https://w
 
 Looking for other team-wide tracking? Check out [EMA Buffs](https://github.com/Quiding/ema_buffs) or Shaman-specific [EMA Totems](https://github.com/Quiding/ema_totems).
 
+There is a small showcase of this + the other plugins mentioned here: https://www.youtube.com/watch?v=1vsrVzWFRxQ
+
 **Note:** This addon likely requires your team to be in the same guild and utilize **guild communications** for settings synchronization, however, all timers are tracked via the **combat log** for high-precision updates.
 
 ![ezgif-8bfe5fb2f2e656b7](https://github.com/user-attachments/assets/d510f737-f1ca-4f12-a113-81b4167a5414)

@@ -418,11 +418,17 @@ function EMA_Cooldowns:ScanUnitBuffs(unit)
                 if bInfo then
                     if foundAnyBuff[bInfo.name] or (bInfo.id and foundAnyBuffID[bInfo.id]) then
                         stillHasBuff = true
+                        data.buffHasAppeared = true
                     end
                 end
                 
-                if not stillHasBuff then
-                    -- Buff is gone, start the cooldown now!
+                -- Only start the cooldown if the buff was seen and is now gone, 
+                -- or if we've waited a reasonable amount of time (2 seconds) and the buff never appeared.
+                data.waitThreshold = (data.waitThreshold or GetTime())
+                local waitedTooLong = (GetTime() - data.waitThreshold) > 2.0
+
+                if (data.buffHasAppeared and not stillHasBuff) or (not data.buffHasAppeared and waitedTooLong) then
+                    -- Buff is gone (or never showed up), start the cooldown now!
                     data.startTime = GetTime()
                     data.pendingBuff = false
                     ns.UI:UpdateUI()
@@ -462,29 +468,12 @@ function EMA_Cooldowns:COMBAT_LOG_EVENT_UNFILTERED()
                             self.activeCooldowns[charKey] = self.activeCooldowns[charKey] or {}
                             
                             local bInfo = self.delayedSpells[spellName]
-                            local isBuffActive = false
                             
-                            -- Fix: Scan unit buffs immediately to avoid the "timer blink"
                             if bInfo then
-                                local units = {"player", "party1", "party2", "party3", "party4"}
-                                if IsInRaid() then for i=1,40 do table.insert(units, "raid"..i) end end
-                                for _, unit in ipairs(units) do
-                                    if GetUnitName(unit, true) == characterName then
-                                        self:ScanUnitBuffs(unit)
-                                        break
-                                    end
-                                end
-                            end
-
-                            if bInfo and self.teamBuffs[charKey] then
-                                if self.teamBuffs[charKey][bInfo.name] then
-                                    isBuffActive = true
-                                end
-                            end
-                            
-                            if isBuffActive then
-                                -- Buff is active, don't start timer yet, mark as pending
+                                -- For delayed spells, always start in pending state and wait for buff to appear/expire.
                                 self.activeCooldowns[charKey][spellName] = { startTime = 0, duration = spellInfo.duration, pendingBuff = true }
+                                -- Small delay to allow buff to be applied by the server before first check
+                                self:ScheduleTimer("ScanTeamBuffs", 0.1)
                             else
                                 self.activeCooldowns[charKey][spellName] = { startTime = GetTime(), duration = spellInfo.duration, pendingBuff = false }
                             end

@@ -493,17 +493,16 @@ function EMA_Cooldowns:PushSettingsToTeam() self:EMASendSettings(); self:EMASend
 function EMA_Cooldowns:EMAOnSettingsReceived(characterName, settings)
     if characterName ~= self.characterName then
         for k, v in pairs(settings) do
-            if k ~= "enabledMembers" and k ~= "individualBarPositions" and k ~= "teamBarsPos" then
-                if type(v) == "table" then
-                    self.db[k] = EMAUtilities:CopyTable(v)
-                else
-                    self.db[k] = v
-                end
+            if type(v) == "table" then
+                self.db[k] = EMAUtilities:CopyTable(v)
+            else
+                self.db[k] = v
             end
         end
         self:SettingsRefresh()
         ns.UI:RefreshBars()
         ns.UI:UpdatePositionFromDB()
+        self:Print( L["SETTINGS_RECEIVED_FROM_A"]( characterName ) )
     end
 end
 
